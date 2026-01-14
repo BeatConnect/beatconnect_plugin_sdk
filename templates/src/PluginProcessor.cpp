@@ -7,6 +7,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ParameterIDs.h"
 
 //==============================================================================
 {{PLUGIN_NAME}}Processor::{{PLUGIN_NAME}}Processor()
@@ -32,7 +33,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout {{PLUGIN_NAME}}Processor::cr
 
     // Example: Gain parameter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID("gain", 1),
+        juce::ParameterID { ParamIDs::gain, 1 },
         "Gain",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.5f,
@@ -42,7 +43,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout {{PLUGIN_NAME}}Processor::cr
 
     // Example: Mix parameter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID("mix", 1),
+        juce::ParameterID { ParamIDs::mix, 1 },
         "Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         1.0f,
@@ -52,7 +53,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout {{PLUGIN_NAME}}Processor::cr
 
     // Example: Boolean toggle
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID("bypass", 1),
+        juce::ParameterID { ParamIDs::bypass, 1 },
         "Bypass",
         false
     ));
@@ -162,9 +163,9 @@ void {{PLUGIN_NAME}}Processor::processBlock(juce::AudioBuffer<float>& buffer,
     // ==============================================================================
     // Get parameter values (atomic read - thread safe)
     // ==============================================================================
-    auto gainValue = apvts.getRawParameterValue("gain")->load();
-    auto mixValue = apvts.getRawParameterValue("mix")->load();
-    auto bypassValue = apvts.getRawParameterValue("bypass")->load() > 0.5f;
+    auto gainValue = apvts.getRawParameterValue(ParamIDs::gain)->load();
+    auto mixValue = apvts.getRawParameterValue(ParamIDs::mix)->load();
+    auto bypassValue = apvts.getRawParameterValue(ParamIDs::bypass)->load() > 0.5f;
 
     if (bypassValue)
         return;

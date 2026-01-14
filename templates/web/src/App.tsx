@@ -1,130 +1,76 @@
-import { useEffect, useState, useCallback } from 'react'
+/**
+ * {{PLUGIN_NAME}} - Web UI
+ *
+ * This React app runs inside JUCE's WebBrowserComponent via WebView2/WKWebView.
+ * It uses JUCE 8's native relay system for automatic bidirectional parameter sync.
+ *
+ * Parameter IDs used here must EXACTLY match:
+ * 1. C++ ParameterIDs.h (e.g., ParamIDs::gain)
+ * 2. C++ relay creation (e.g., WebSliderRelay("gain"))
+ */
+
+import { useSliderParam, useToggleParam, useVisualizerData } from './hooks/useJuceParam';
+import { isInJuceWebView } from './lib/juce-bridge';
 
 // ==============================================================================
-// JUCE Bridge Types
+// Parameter IDs (must match C++ ParameterIDs.h)
 // ==============================================================================
-declare global {
-  interface Window {
-    chrome?: {
-      webview?: {
-        postMessage: (msg: string) => void
-      }
-    }
-  }
-}
-
-interface ParameterState {
-  [key: string]: number
-}
-
-interface JuceMessage {
-  type: string
-  data: unknown
-}
+const ParamIDs = {
+  gain: 'gain',
+  mix: 'mix',
+  bypass: 'bypass',
+  // mode: 'mode',
+} as const;
 
 // ==============================================================================
-// JUCE Communication Utilities
+// Visualizer Data Type (matches C++ sendVisualizerData())
 // ==============================================================================
-function sendToJuce(type: string, data: unknown) {
-  const message = JSON.stringify({ type, data })
-
-  // WebView2 channel
-  if (window.chrome?.webview?.postMessage) {
-    window.chrome.webview.postMessage(message)
-    return
-  }
-
-  // Fallback: webkit message handler (macOS)
-  // @ts-expect-error webkit is injected by JUCE on macOS
-  if (window.webkit?.messageHandlers?.juce?.postMessage) {
-    // @ts-expect-error webkit is injected by JUCE on macOS
-    window.webkit.messageHandlers.juce.postMessage(message)
-    return
-  }
-
-  console.log('[Web] JUCE bridge not available, message:', type, data)
-}
-
-function setParameter(id: string, value: number) {
-  sendToJuce('setParameter', { id, value })
+interface VisualizerData {
+  inputLevel?: number;
+  outputLevel?: number;
+  isPlaying?: boolean;
 }
 
 // ==============================================================================
 // Main App Component
 // ==============================================================================
 function App() {
-  const [params, setParams] = useState<ParameterState>({
-    gain: 0.5,
-    mix: 1.0,
-    bypass: 0,
-  })
+  // Parameter hooks - automatically sync with JUCE
+  const gain = useSliderParam(ParamIDs.gain, { defaultValue: 0.5 });
+  const mix = useSliderParam(ParamIDs.mix, { defaultValue: 1.0 });
+  const bypass = useToggleParam(ParamIDs.bypass, { defaultValue: false });
 
-  // Handle messages from JUCE
-  const handleJuceMessage = useCallback((event: MessageEvent) => {
-    try {
-      const msg: JuceMessage = typeof event.data === 'string'
-        ? JSON.parse(event.data)
-        : event.data
+  // Example: ComboBox parameter
+  // const mode = useComboParam(ParamIDs.mode, { defaultIndex: 0 });
 
-      if (msg.type === 'parameterState') {
-        // Full parameter state update
-        setParams(msg.data as ParameterState)
-      } else if (msg.type === 'parameterChanged') {
-        // Single parameter update
-        const { id, value } = msg.data as { id: string; value: number }
-        setParams(prev => ({ ...prev, [id]: value }))
-      }
-    } catch {
-      // Ignore non-JSON messages
-    }
-  }, [])
+  // Visualizer data from C++ (30 Hz updates)
+  const vizData = useVisualizerData<VisualizerData>('visualizerData', {});
 
-  // Set up message listener
-  useEffect(() => {
-    window.addEventListener('message', handleJuceMessage)
+  // Connection status indicator
+  const isConnected = isInJuceWebView();
 
-    // Tell JUCE we're ready
-    sendToJuce('ready', {})
-
-    return () => {
-      window.removeEventListener('message', handleJuceMessage)
-    }
-  }, [handleJuceMessage])
-
-  // ==============================================================================
-  // UI Handlers
-  // ==============================================================================
-  const handleGainChange = (value: number) => {
-    setParams(prev => ({ ...prev, gain: value }))
-    setParameter('gain', value)
-  }
-
-  const handleMixChange = (value: number) => {
-    setParams(prev => ({ ...prev, mix: value }))
-    setParameter('mix', value)
-  }
-
-  const handleBypassToggle = () => {
-    const newValue = params.bypass > 0.5 ? 0 : 1
-    setParams(prev => ({ ...prev, bypass: newValue }))
-    setParameter('bypass', newValue)
-  }
-
-  // ==============================================================================
-  // Render
-  // ==============================================================================
   return (
     <div className="plugin-container">
+      {/* Header */}
       <header className="plugin-header">
-        <h1>{{PLUGIN_NAME}}</h1>
-        <button
-          className={`bypass-button ${params.bypass > 0.5 ? 'active' : ''}`}
-          onClick={handleBypassToggle}
-        >
-          {params.bypass > 0.5 ? 'BYPASSED' : 'ACTIVE'}
-        </button>
+        <h1>{'{{PLUGIN_NAME}}'}</h1>
+        <div className="header-controls">
+          {/* Connection indicator */}
+          <span className={`connection-indicator ${isConnected ? 'connected' : ''}`}>
+            {isConnected ? 'Connected' : 'Dev Mode'}
+          </span>
+
+          {/* Bypass button */}
+          <button
+            className={`bypass-button ${bypass.value ? 'bypassed' : ''}`}
+            onClick={bypass.toggle}
+          >
+            {bypass.value ? 'BYPASSED' : 'ACTIVE'}
+          </button>
+        </div>
       </header>
 
+      {/* Main Controls */}
       <main className="plugin-controls">
         {/* Gain Control */}
         <div className="control-group">
@@ -135,11 +81,15 @@ function App() {
             min={0}
             max={1}
             step={0.01}
-            value={params.gain}
-            onChange={(e) => handleGainChange(parseFloat(e.target.value))}
+            value={gain.value}
+            onMouseDown={gain.onDragStart}
+            onMouseUp={gain.onDragEnd}
+            onTouchStart={gain.onDragStart}
+            onTouchEnd={gain.onDragEnd}
+            onChange={(e) => gain.setValue(parseFloat(e.target.value))}
             className="slider"
           />
-          <span className="value">{(params.gain * 100).toFixed(0)}%</span>
+          <span className="value">{(gain.value * 100).toFixed(0)}%</span>
         </div>
 
         {/* Mix Control */}
@@ -151,19 +101,53 @@ function App() {
             min={0}
             max={1}
             step={0.01}
-            value={params.mix}
-            onChange={(e) => handleMixChange(parseFloat(e.target.value))}
+            value={mix.value}
+            onMouseDown={mix.onDragStart}
+            onMouseUp={mix.onDragEnd}
+            onTouchStart={mix.onDragStart}
+            onTouchEnd={mix.onDragEnd}
+            onChange={(e) => mix.setValue(parseFloat(e.target.value))}
             className="slider"
           />
-          <span className="value">{(params.mix * 100).toFixed(0)}%</span>
+          <span className="value">{(mix.value * 100).toFixed(0)}%</span>
         </div>
+
+        {/* Example: ComboBox control */}
+        {/* {mode.choices.length > 0 && (
+          <div className="control-group">
+            <label htmlFor="mode">Mode</label>
+            <select
+              id="mode"
+              value={mode.index}
+              onChange={(e) => mode.setIndex(parseInt(e.target.value))}
+              className="select"
+            >
+              {mode.choices.map((choice, i) => (
+                <option key={i} value={i}>{choice}</option>
+              ))}
+            </select>
+          </div>
+        )} */}
       </main>
 
+      {/* Visualizer Section (optional) */}
+      {vizData.inputLevel !== undefined && (
+        <section className="visualizer">
+          <div className="meter">
+            <div
+              className="meter-fill"
+              style={{ width: `${(vizData.inputLevel ?? 0) * 100}%` }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
       <footer className="plugin-footer">
-        <span>BeatConnect Plugin SDK Template</span>
+        <span>BeatConnect Plugin SDK</span>
       </footer>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

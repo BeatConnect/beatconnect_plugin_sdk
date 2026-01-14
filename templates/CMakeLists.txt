@@ -1,7 +1,8 @@
 # ==============================================================================
 # BeatConnect Plugin Template - CMakeLists.txt
 # ==============================================================================
-# Replace {{PLUGIN_NAME}}, {{COMPANY_NAME}}, {{PLUGIN_CODE}}, {{MANUFACTURER_CODE}}
+# Replace {{PLUGIN_NAME}}, {{PLUGIN_NAME_UPPER}}, {{COMPANY_NAME}},
+# {{PLUGIN_CODE}}, {{MANUFACTURER_CODE}}
 # ==============================================================================
 
 cmake_minimum_required(VERSION 3.22)
@@ -13,6 +14,13 @@ project({{PLUGIN_NAME}} VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ==============================================================================
+# Development Mode
+# ==============================================================================
+# Set to ON for development (hot reload from Vite dev server)
+# Set to OFF for production (load bundled web assets)
+option({{PLUGIN_NAME_UPPER}}_DEV_MODE "Enable development mode with Vite hot reload" OFF)
 
 # ==============================================================================
 # JUCE
@@ -45,18 +53,18 @@ juce_add_plugin(${PROJECT_NAME}
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
 
     # Product Name (shown in DAW)
     PRODUCT_NAME "${PROJECT_NAME}"
 
-    # Web Browser for UI
-    NEEDS_WEB_BROWSER TRUE
+    # WebView2 support (Windows)
+    NEEDS_WEBVIEW2 TRUE
 
     # Bundle ID (macOS)
     BUNDLE_ID "com.{{COMPANY_NAME_LOWER}}.${PROJECT_NAME}"
 
-    # Manufacturer URL
+    # Manufacturer Info
     COMPANY_WEBSITE "https://beatconnect.io"
     COMPANY_EMAIL "support@beatconnect.io"
 )
@@ -70,6 +78,7 @@ target_sources(${PROJECT_NAME}
         src/PluginProcessor.h
         src/PluginEditor.cpp
         src/PluginEditor.h
+        src/ParameterIDs.h
 )
 
 # ==============================================================================
@@ -77,16 +86,24 @@ target_sources(${PROJECT_NAME}
 # ==============================================================================
 target_compile_definitions(${PROJECT_NAME}
     PUBLIC
+        # JUCE Configuration
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_REPORT_APP_USAGE=0
 
-        # BeatConnect Integration
-        BEATCONNECT_PLUGIN_ID="${BEATCONNECT_PLUGIN_ID}"
-        BEATCONNECT_API_URL="${BEATCONNECT_API_URL}"
+        # Dev mode toggle (0 = production, 1 = development)
+        $<IF:$<BOOL:${{{PLUGIN_NAME_UPPER}}_DEV_MODE}>,{{PLUGIN_NAME_UPPER}}_DEV_MODE=1,{{PLUGIN_NAME_UPPER}}_DEV_MODE=0>
 )
+
+# Windows-specific WebView2 support
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME}
+        PUBLIC
+            JUCE_USE_WIN_WEBVIEW2=1
+    )
+endif()
 
 # ==============================================================================
 # Link Libraries
@@ -104,28 +121,33 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 # ==============================================================================
-# Web UI Assets
+# Web UI Assets (Production Only)
 # ==============================================================================
-# Copy web UI build output to plugin bundle
-if(EXISTS "${CMAKE_SOURCE_DIR}/web/dist")
+# Copy web UI build output to plugin bundle for production builds
+if(EXISTS "${CMAKE_SOURCE_DIR}/web/dist" AND NOT ${{{PLUGIN_NAME_UPPER}}_DEV_MODE})
+    # Copy to Standalone
+    add_custom_command(TARGET ${PROJECT_NAME}_Standalone POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/web/dist"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}_Standalone>/Resources/WebUI"
+        COMMENT "Copying WebUI to Standalone..."
+    )
+
+    # Copy to VST3
+    add_custom_command(TARGET ${PROJECT_NAME}_VST3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/web/dist"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}_VST3>/../Resources/WebUI"
+        COMMENT "Copying WebUI to VST3..."
+    )
+
+    # macOS: Also copy to AU
     if(APPLE)
-        # macOS: Copy to Resources inside bundle
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        add_custom_command(TARGET ${PROJECT_NAME}_AU POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_SOURCE_DIR}/web/dist"
-                "$<TARGET_BUNDLE_CONTENT_DIR:${PROJECT_NAME}_VST3>/Resources/web"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_SOURCE_DIR}/web/dist"
-                "$<TARGET_BUNDLE_CONTENT_DIR:${PROJECT_NAME}_AU>/Resources/web"
-            COMMENT "Copying web assets to macOS bundles"
-        )
-    else()
-        # Windows/Linux: Copy alongside plugin binary
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_SOURCE_DIR}/web/dist"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}_VST3>/web"
-            COMMENT "Copying web assets to build output"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}_AU>/../Resources/WebUI"
+            COMMENT "Copying WebUI to AU..."
         )
     endif()
 endif()
