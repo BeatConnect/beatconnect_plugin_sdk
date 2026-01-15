@@ -362,13 +362,11 @@ private:
         auto tempFile = targetFile.getSiblingFile(fileName + ".download");
 
         // Create input stream
-        juce::URL::InputStreamOptions options(
-            juce::URL::ParameterHandling::inAddress);
-        options.withConnectionTimeoutMs(config.requestTimeoutMs);
-
         int statusCode = 0;
-        auto stream = downloadUrl.createInputStream(options, nullptr,
-            nullptr, "", 0, nullptr, &statusCode);
+        auto stream = downloadUrl.createInputStream(
+            juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                .withConnectionTimeoutMs(config.requestTimeoutMs)
+                .withStatusCode(&statusCode));
 
         if (!stream) {
             if (statusCode == 401 || statusCode == 403) {

@@ -27,6 +27,9 @@
 #if __has_include(<juce_core/juce_core.h>)
     #define BEATCONNECT_USE_JUCE 1
     #include <juce_core/juce_core.h>
+    #if __has_include(<juce_cryptography/juce_cryptography.h>)
+        #include <juce_cryptography/juce_cryptography.h>
+    #endif
 #else
     #define BEATCONNECT_USE_JUCE 0
 #endif
