@@ -167,7 +167,7 @@ public:
     }
 
     void configure(const ActivationConfig& config) {
-        std::lock_guard<std::mutex> lock(mutex);
+        // No mutex needed - this runs on main thread during plugin init
         this->config = config;
         configured = true;
 
@@ -181,20 +181,14 @@ public:
                               .getChildFile("activation.json")
                               .getFullPathName().toStdString();
 #else
-            // Fallback
             statePath = "activation.json";
 #endif
         } else {
             statePath = config.statePath;
         }
 
-        // Load existing state
+        // Load existing state - just checks if file exists
         loadState();
-
-        // NOTE: validateOnStartup is intentionally NOT performed here during plugin load.
-        // Many DAWs (Ableton, Logic) don't tolerate network activity during plugin initialization.
-        // Validation should be triggered by the UI layer after the editor is fully constructed.
-        // The saved activation state is trusted until explicitly validated.
     }
 
     bool isConfigured() const {
