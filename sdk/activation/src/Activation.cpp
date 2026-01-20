@@ -305,17 +305,28 @@ public:
             activationInfo.machineId = machineId;
             activationInfo.isValid = true;
 
+            // Server returns "activated_at" or we generate it locally
             if (obj->hasProperty("activated_at")) {
                 activationInfo.activatedAt = obj->getProperty("activated_at")
                     .toString().toStdString();
+            } else {
+                // Generate timestamp locally (server doesn't always return it)
+                activationInfo.activatedAt = juce::Time::getCurrentTime()
+                    .toISO8601(true).toStdString();
             }
-            if (obj->hasProperty("current_activations")) {
-                activationInfo.currentActivations = (int)obj->getProperty(
-                    "current_activations");
+
+            // Server returns "activations" (not "current_activations")
+            if (obj->hasProperty("activations")) {
+                activationInfo.currentActivations = static_cast<int>(
+                    obj->getProperty("activations"));
+            } else if (obj->hasProperty("current_activations")) {
+                activationInfo.currentActivations = static_cast<int>(
+                    obj->getProperty("current_activations"));
             }
+
             if (obj->hasProperty("max_activations")) {
-                activationInfo.maxActivations = (int)obj->getProperty(
-                    "max_activations");
+                activationInfo.maxActivations = static_cast<int>(
+                    obj->getProperty("max_activations"));
             }
 
             activated = true;
