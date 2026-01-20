@@ -74,6 +74,9 @@ struct ActivationConfig {
     // Your plugin's project ID (UUID from BeatConnect dashboard)
     std::string pluginId;
 
+    // Supabase publishable key for API authentication
+    std::string supabaseKey;
+
     // Optional: Path to store activation state (defaults to app data folder)
     std::string statePath;
 

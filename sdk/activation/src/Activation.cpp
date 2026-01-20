@@ -123,7 +123,14 @@ public:
 
         juce::URL::InputStreamOptions options(
             juce::URL::ParameterHandling::inPostData);
-        options.withExtraHeaders("Content-Type: application/json\r\n");
+
+        // Build headers with Supabase authentication
+        juce::String headers = "Content-Type: application/json\r\n";
+        if (!config.supabaseKey.empty()) {
+            headers += "apikey: " + juce::String(config.supabaseKey) + "\r\n";
+            headers += "Authorization: Bearer " + juce::String(config.supabaseKey) + "\r\n";
+        }
+        options.withExtraHeaders(headers);
         options.withConnectionTimeoutMs(config.requestTimeoutMs);
         options.withNumRedirectsToFollow(0);
 
@@ -221,7 +228,14 @@ public:
 
         juce::URL::InputStreamOptions options(
             juce::URL::ParameterHandling::inPostData);
-        options.withExtraHeaders("Content-Type: application/json\r\n");
+
+        // Build headers with Supabase authentication
+        juce::String headers = "Content-Type: application/json\r\n";
+        if (!config.supabaseKey.empty()) {
+            headers += "apikey: " + juce::String(config.supabaseKey) + "\r\n";
+            headers += "Authorization: Bearer " + juce::String(config.supabaseKey) + "\r\n";
+        }
+        options.withExtraHeaders(headers);
         options.withConnectionTimeoutMs(config.requestTimeoutMs);
 
         url = url.withPOSTData(jsonBody);
@@ -286,7 +300,14 @@ public:
 
         juce::URL::InputStreamOptions options(
             juce::URL::ParameterHandling::inPostData);
-        options.withExtraHeaders("Content-Type: application/json\r\n");
+
+        // Build headers with Supabase authentication
+        juce::String headers = "Content-Type: application/json\r\n";
+        if (!config.supabaseKey.empty()) {
+            headers += "apikey: " + juce::String(config.supabaseKey) + "\r\n";
+            headers += "Authorization: Bearer " + juce::String(config.supabaseKey) + "\r\n";
+        }
+        options.withExtraHeaders(headers);
         options.withConnectionTimeoutMs(config.requestTimeoutMs);
 
         url = url.withPOSTData(jsonBody);
