@@ -560,15 +560,13 @@ public:
             activationInfo.isValid = static_cast<bool>(obj->getProperty("is_valid"));
         }
 
-        // Verify machine ID matches
-        if (!activationInfo.machineId.empty() &&
-            activationInfo.machineId != MachineId::generate()) {
-            // Different machine - invalidate
-            debug("loadState: Machine ID mismatch - invalidating");
-            activationInfo.isValid = false;
-            activated = false;
-            return;
-        }
+        // NOTE: We do NOT verify machine ID during loadState() because:
+        // 1. MachineId::generate() makes Windows API calls (registry, volume info)
+        // 2. These calls can cause issues during DAW plugin scanning
+        // 3. Machine ID verification is deferred to isActivated() which is called
+        //    from the UI layer after the plugin is fully loaded
+        //
+        // The saved machine_id is stored and will be compared lazily when needed.
 
         activated = !activationInfo.activationCode.empty();
         debug("loadState: Loaded activation state, activated=" + std::string(activated ? "true" : "false"));
