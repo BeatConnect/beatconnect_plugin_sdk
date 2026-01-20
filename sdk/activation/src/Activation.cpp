@@ -166,20 +166,38 @@ public:
         }
     }
 
+    // Simple init-time logging that works before Debug::init() is called
+    void initLog(const std::string& msg) {
+#if BEATCONNECT_USE_JUCE
+        auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("BeatConnect")
+            .getChildFile("init.log");
+        logFile.getParentDirectory().createDirectory();
+        logFile.appendText(msg + "\n");
+        DBG(juce::String(msg));
+#endif
+    }
+
     void configure(const ActivationConfig& config) {
         // No mutex needed - this runs on main thread during plugin init
+        initLog("[Activation] configure() called");
+
         this->config = config;
         configured = true;
+        initLog("[Activation] config set, configured=true");
 
         // Set default state path if not provided
         if (config.statePath.empty()) {
 #if BEATCONNECT_USE_JUCE
             auto appData = juce::File::getSpecialLocation(
                 juce::File::userApplicationDataDirectory);
+            initLog("[Activation] appData: " + appData.getFullPathName().toStdString());
+
             statePath = appData.getChildFile("BeatConnect")
                               .getChildFile(config.pluginId)
                               .getChildFile("activation.json")
                               .getFullPathName().toStdString();
+            initLog("[Activation] statePath: " + statePath);
 #else
             statePath = "activation.json";
 #endif
@@ -187,8 +205,9 @@ public:
             statePath = config.statePath;
         }
 
-        // Load existing state - just checks if file exists
+        initLog("[Activation] about to call loadState()");
         loadState();
+        initLog("[Activation] loadState() returned, configure() complete");
     }
 
     bool isConfigured() const {
@@ -509,20 +528,28 @@ public:
 
     void loadState() {
 #if BEATCONNECT_USE_JUCE
-        // NOTE: This is called from configure() which already holds the mutex.
-        // Do NOT acquire the mutex here or it will deadlock.
+        initLog("[Activation] loadState() called");
 
         if (statePath.empty()) {
+            initLog("[Activation] loadState: statePath is empty, returning");
             return;
         }
 
+        initLog("[Activation] loadState: checking file at " + statePath);
         juce::File file(statePath);
 
-        // Simple check: if the activation file exists, consider activated.
-        if (file.existsAsFile()) {
+        initLog("[Activation] loadState: juce::File created");
+        bool exists = file.existsAsFile();
+        initLog("[Activation] loadState: existsAsFile() = " + std::string(exists ? "true" : "false"));
+
+        if (exists) {
+            initLog("[Activation] loadState: setting activated=true");
             activated = true;
             activationInfo.isValid = true;
+            initLog("[Activation] loadState: flags set");
         }
+
+        initLog("[Activation] loadState() complete");
 #endif
     }
 
