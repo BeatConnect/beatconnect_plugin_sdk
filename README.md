@@ -61,10 +61,11 @@ License activation with machine fingerprinting:
 ```cpp
 #include <beatconnect/Activation.h>
 
-// Configure
+// Configure (apiBaseUrl is the Supabase URL WITHOUT /functions/v1)
 beatconnect::ActivationConfig config;
-config.apiBaseUrl = "https://xxx.supabase.co/functions/v1";
+config.apiBaseUrl = "https://xxx.supabase.co";  // SDK adds /functions/v1 internally
 config.pluginId = "your-project-uuid";
+config.supabaseKey = "your-publishable-key";    // For API auth headers
 
 auto& activation = beatconnect::Activation::getInstance();
 activation.configure(config);
@@ -74,12 +75,41 @@ if (!activation.isActivated()) {
     showActivationDialog();
 }
 
-// Activate
+// Activate (supports UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 auto status = activation.activate(userEnteredCode);
 if (status == beatconnect::ActivationStatus::Valid) {
-    // Success!
+    // Success! State is automatically saved.
 }
 ```
+
+**Important**: The SDK does NOT perform network validation during `configure()`. This is intentional - many DAWs (Ableton, Logic) reject plugins that make network requests during initialization. Trigger validation from the UI layer after the plugin is fully loaded if needed.
+
+### Debug Logging (`beatconnect::Debug`)
+
+Cross-platform debug logging for troubleshooting:
+
+```cpp
+#include <beatconnect/Activation.h>  // Debug is in same header
+
+// Initialize in your PluginEditor constructor
+// Logs written to: AppData/BeatConnect/<pluginName>/debug.log
+bool debugEnabled = getDebugFlagFromConfig();
+beatconnect::Debug::init("MyPlugin", debugEnabled);
+
+// Log messages (thread-safe, no-op if disabled)
+beatconnect::Debug::log("Starting activation...");
+beatconnect::Debug::log("Result: " + statusString);
+
+// Show user where logs are (opens folder in file manager)
+if (beatconnect::Debug::isEnabled()) {
+    beatconnect::Debug::revealLogFile();
+}
+```
+
+Log file locations:
+- **macOS**: `~/Library/Application Support/BeatConnect/<pluginName>/debug.log`
+- **Windows**: `%APPDATA%/BeatConnect/<pluginName>/debug.log`
+- **Linux**: `~/.local/share/BeatConnect/<pluginName>/debug.log`
 
 ### Asset Downloader (`sdk/activation/`)
 
