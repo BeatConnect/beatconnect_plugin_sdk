@@ -515,6 +515,9 @@ public:
 
     void loadState() {
 #if BEATCONNECT_USE_JUCE
+        // NOTE: This is called from configure() which already holds the mutex.
+        // Do NOT acquire the mutex here or it will deadlock.
+
         if (statePath.empty()) {
             return;
         }
@@ -522,10 +525,7 @@ public:
         juce::File file(statePath);
 
         // Simple check: if the activation file exists, consider activated.
-        // No parsing, no verification - just existence check.
-        // This avoids any potential issues during DAW plugin scanning.
         if (file.existsAsFile()) {
-            std::lock_guard<std::mutex> lock(mutex);
             activated = true;
             activationInfo.isValid = true;
         }
