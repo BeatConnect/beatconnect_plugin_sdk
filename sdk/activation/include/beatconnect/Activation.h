@@ -31,6 +31,69 @@
 namespace beatconnect {
 
 // ==============================================================================
+// Debug Logging Utility
+// ==============================================================================
+
+/**
+ * Cross-platform debug logging for BeatConnect plugins.
+ *
+ * Logs are written to the user's app data folder:
+ *   macOS:   ~/Library/Application Support/BeatConnect/<pluginName>/debug.log
+ *   Windows: C:\Users\<user>\AppData\Roaming\BeatConnect\<pluginName>\debug.log
+ *   Linux:   ~/.local/share/BeatConnect/<pluginName>/debug.log
+ *
+ * Usage:
+ *   beatconnect::Debug::init("MyPlugin", true);  // Enable debug mode
+ *   beatconnect::Debug::log("Starting activation...");
+ *   beatconnect::Debug::log("Result: " + resultString);
+ *   beatconnect::Debug::revealLogFile();  // Open folder containing log
+ */
+class Debug {
+public:
+    /**
+     * Initialize debug logging for a plugin.
+     * @param pluginName Name used for the log folder (e.g., "MyPlugin")
+     * @param enabled Whether debug logging is enabled
+     */
+    static void init(const std::string& pluginName, bool enabled = false);
+
+    /**
+     * Check if debug logging is enabled.
+     */
+    static bool isEnabled();
+
+    /**
+     * Enable or disable debug logging at runtime.
+     */
+    static void setEnabled(bool enabled);
+
+    /**
+     * Log a debug message (only if enabled).
+     * Thread-safe.
+     */
+    static void log(const std::string& message);
+
+    /**
+     * Clear the debug log file.
+     */
+    static void clearLog();
+
+    /**
+     * Get the path to the debug log file.
+     */
+    static std::string getLogFilePath();
+
+    /**
+     * Open the folder containing the log file in the system file manager.
+     * Useful for helping users find logs for troubleshooting.
+     */
+    static void revealLogFile();
+
+private:
+    Debug() = delete;
+};
+
+// ==============================================================================
 // Activation Status
 // ==============================================================================
 
