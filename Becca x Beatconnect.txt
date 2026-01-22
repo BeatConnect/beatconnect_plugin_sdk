@@ -1,0 +1,218 @@
+﻿BECCA X BEAT CONNECT
+
+
+
+
+Plugin name: Becca Tone Amp
+
+
+Concept
+
+
+Becca Tone Amp is my go-to guitar tone in a box. I wanted to make something that really captures the warmth, the feel, and the emotion I try to get every time I play. The idea is that someone plugs in and instantly feels inspired, like they’re jamming with me. The plugin is clean but rich, and gives players room to experiment without feeling overwhelmed.
+This is my musical philosophy: tone isn’t just about how it sounds but it’s about how it makes you feel. The plugin is buttery, warm, slightly driven, and really expressive. It works for  soulful fusion, funk, R&B, indie pop, psychedelic rock, blues and melodic playing, basically anything I normally play. Should make players feel like they’re playing with passion and intention, not just mechanically.
+
+
+Core Tone DNA
+
+
+First impression → As soon as you start playing, you should feel like you can jam forever. The tone hits in the right spot: warm, smooth, slightly driven, not too clean, not too dirty, just perfect for almost any melodic song.
+
+
+Clean tone → Thick, warm and rounded rather than glassy and flat.
+
+
+Influences → Mateus Asato for warmth, Cory Wong for funk precision, John Mayer for smooth expressiveness and slightly overdriven stuff. Hendrix-style lead and rhythm fuzz shows up lightly in some presets.
+
+
+Guitar compatibility → Works amazing with single coils in the neck/middle and humbuckers on the bridge, but especially with coil-split guitars, which I love. Middle + bridge combos in single coils are my go-to for funk and rhythmic playing, while neck and middle with humbuckers are my go-to for everything else I play.
+
+
+Amp feel and dynamics
+
+
+Drive / Warmth → Slight edge-of-breakup warmth is built-in. The gain knob lets you push it into overdriven, harmonic-rich and slightly fuzzy territory.
+
+
+Compression → The built-in is super subtle, however you should be able to increase it using a knob on the amp (ideal for funk/jam style). Some presets will have more or less compression built in.
+
+
+Effects
+
+
+* Chorus, tremolo, delay, reverb, and light distortion live in a separate pedal section. Compression is built into the amp at a subtle default level but users can tweak it with a knob on the amp itself. Advanced users could also have the option to modify compression in pedal form (as a separate effect) if desired.
+* Some presets will have some FX pedals already turned on by default. (e.g. 80s preset will have chorus already on)
+* Amp knobs do not control effects, so the plugin stays simple and beginner friendly.
+* Effects can be stacked, tweaked, and experimented with, that way users have freedom to play around.
+
+
+Interface general idea
+
+
+* Minimal and easy to use  (I don’t want anyone to feel intimidated)
+
+
+* Advanced players can tweak gain, compression, pedal FX, eq, room, cab, for full control.
+
+
+* Only a few main knobs on the amp itself: lows, mids, high, level, volume, presence, gain, compression
+
+
+* Pedals are in a separate section, visually clear, so you can tweak without cluttering the amp
+
+
+
+
+Presets 
+
+
+Presets will be labeled by mood. They’ll provide a starting point but users can tweak to their heart’s content.  (For clarity, these moods loosely correspond to style/genre but are intentionally mood-based to make presets intuitive for beginners.)
+
+
+1. Becca Signature Tone (Default)
+
+
+* Tube amp with slight crunch, warm bluesy tone
+
+
+* Perfect for almost any soulful jam
+
+
+* Subtle harmonic richness, dynamic feel, buttery tone
+
+
+* Minimal built-in compression; responsive to picking
+
+
+* Pedals: slight plate reverb
+
+
+* EQ: higher lows and mids, lower highs
+
+
+Signal chain: Drive → Shape booster → tube amp → plate reverb → Digital reverb → digital delay
+
+
+2. Pristine Clean
+
+
+* Pristine, airy clean 
+* * Still a warm tone
+
+
+* Pedals: Plate reverb for space; Delay for ambience
+
+
+* Suited for R&B rhythm, arpeggios
+        Signal chain: Compression → amp → EQ → Delay → Shimmer reverb → Plate reverb → cab
+
+
+3. Super clean
+
+
+* Simple, flat clean (Fender Twin Deluxe vibe)
+* Pedal: Little to no plate reverb
+
+
+* EQ: higher mids, lower highs
+
+
+4. Overdriven / Fuzzy (Hendrix Style “e.g. )
+
+
+* Warm overdrive with light fuzz
+
+
+* Gain knob lets users push it further
+
+
+* Expressive and fun
+
+
+5. 80s Dream
+
+
+* Clean with heavy chorus and slight tremolo
+* * Plate reverb for spacious feel
+
+
+* Small amount of delay
+
+
+* Playful, indie pop mood
+
+
+6. Funk groove
+
+
+* Tight, compressed, rhythm-focused
+
+
+* Slight chorus for texture
+
+
+* Perfect for grooves and pocket playing
+
+
+* EQ: Balanced mid, lows and highs. Lows can be on the lower side if anything. 
+
+
+7. Indie grit
+
+
+* Imperfect and responsive to picking
+
+
+* Medium crunch with responsive tremolo that responds to picking intensity
+
+
+* Subtle chorus
+
+
+* High amount of plate reverb
+
+
+
+
+User Experience Goals
+
+
+* Beginners should be able to plug in, start playing, and feel instantly musical.
+
+
+* Experts can tweak gain, compression, pedals, and tone, and optionally access an advanced EQ & room page for deeper customization.
+
+
+
+
+
+
+
+
+
+
+
+
+Advanced Controls / Expert Options
+
+
+For those who want to dive deeper, the plugin also has an optional Advanced Controls page. Users can still plug in and play immediately, but there will be an advanced page for those who want to dig deeper into shaping their tone.
+
+
+The Advanced Controls page is initially greyed out to keep the interface approachable and not intimidating. Users can click a small toggle labeled “Expert Mode” in a different window (similar to how fx pedals are placed in a different section) to unlock all advanced features. This ensures beginners aren’t overwhelmed, while giving more experienced players full control over their sound.
+
+
+The advanced page includes:
+
+
+* EQ: Full 8-band EQ: ~60Hz → 12kHz, to control highs, mids, and lows. Adjust to taste to shape your tone for different songs or styles. Bands: 60Hz, 120Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz
+
+
+* Room: Adjust mic placement (closer = more direct sound, slightly brighter and punchier, more detail in pick attack; further = Softer, airier tone with more room ambiance → feels like you’re in a bigger space) 
+* Presence: control how forward or distant the amp feels in the mix. (boosting presence = guitar cut through the mix with clarity; reducing presence = softer and more blended sound). 
+* CAB / IR (Built-in): Each preset comes with a subtle cabinet vibe that gives its tone personality and realism. Expert Mode lets you tweak:
+1. Mic placement & angle: closer/farther or straight-on/off-axis for punch vs. smoothness.
+2. Cab style (optional presets): small selection like “vintage,” “modern,” or “tight,” depending on the preset.
+
+
+These controls add depth, space, and realism without changing the core tone. Each preset already has a cab base sound so the plugin sounds great straight out of the box.

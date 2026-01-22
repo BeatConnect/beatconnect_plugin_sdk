@@ -1,0 +1,73 @@
+# Build directories
+build/
+builds/
+cmake-build-*/
+out/
+
+# JUCE build artifacts
+Builds/
+JuceLibraryCode/
+
+# IDE files
+.vs/
+.vscode/
+*.sln
+*.vcxproj*
+*.xcodeproj/
+*.xcworkspace/
+*.user
+*.suo
+*.ncb
+*.opendb
+*.db
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.vst3
+*.component
+*.aaxplugin
+
+# Object files
+*.o
+*.obj
+
+# Debug files
+*.pdb
+*.ilk
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Node modules (for web-ui)
+web-ui/node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+tmpclaude-*
+nul
+
+# Claude Code
+.claude/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# BeatConnect build artifacts (generated at build time by CI)
+resources/project_data.json
