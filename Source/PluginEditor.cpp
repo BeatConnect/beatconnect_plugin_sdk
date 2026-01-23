@@ -84,6 +84,13 @@ void BeccaToneAmpEditor::setupWebView()
     bypassRelay = std::make_unique<juce::WebToggleButtonRelay>("bypass");
     presetRelay = std::make_unique<juce::WebComboBoxRelay>("preset");
 
+    // Pedal Slots (signal chain order)
+    pedalSlot0Relay = std::make_unique<juce::WebComboBoxRelay>("pedal_slot_0");
+    pedalSlot1Relay = std::make_unique<juce::WebComboBoxRelay>("pedal_slot_1");
+    pedalSlot2Relay = std::make_unique<juce::WebComboBoxRelay>("pedal_slot_2");
+    pedalSlot3Relay = std::make_unique<juce::WebComboBoxRelay>("pedal_slot_3");
+    pedalSlot4Relay = std::make_unique<juce::WebComboBoxRelay>("pedal_slot_4");
+
     // Advanced
     expertModeRelay = std::make_unique<juce::WebToggleButtonRelay>("expert_mode");
     micDistanceRelay = std::make_unique<juce::WebSliderRelay>("mic_distance");
@@ -100,12 +107,23 @@ void BeccaToneAmpEditor::setupWebView()
     eq8kHzRelay = std::make_unique<juce::WebSliderRelay>("eq_8khz");
 
     // ===========================================================================
-    // STEP 2: Get resources directory for production builds
+    // STEP 2: Get resources directory - handle both Standalone and VST3 paths
     // ===========================================================================
-    resourcesDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile)
-                       .getParentDirectory()
-                       .getChildFile("Resources")
-                       .getChildFile("WebUI");
+    auto executableFile = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
+    auto executableDir = executableFile.getParentDirectory();
+
+    // Try Standalone path first: executable/../Resources/WebUI
+    resourcesDir = executableDir.getChildFile("Resources").getChildFile("WebUI");
+
+    // If that doesn't exist, try VST3 path: executable/../../Resources/WebUI
+    // VST3 structure: Plugin.vst3/Contents/x86_64-win/Plugin.vst3 (DLL)
+    //                 Plugin.vst3/Contents/Resources/WebUI
+    if (!resourcesDir.isDirectory())
+    {
+        resourcesDir = executableDir.getParentDirectory()
+                           .getChildFile("Resources")
+                           .getChildFile("WebUI");
+    }
 
     // ===========================================================================
     // STEP 3: Build WebBrowserComponent with JUCE 8 options
@@ -177,6 +195,11 @@ void BeccaToneAmpEditor::setupWebView()
         .withOptionsFrom(*distortionLevelRelay)
         .withOptionsFrom(*bypassRelay)
         .withOptionsFrom(*presetRelay)
+        .withOptionsFrom(*pedalSlot0Relay)
+        .withOptionsFrom(*pedalSlot1Relay)
+        .withOptionsFrom(*pedalSlot2Relay)
+        .withOptionsFrom(*pedalSlot3Relay)
+        .withOptionsFrom(*pedalSlot4Relay)
         .withOptionsFrom(*expertModeRelay)
         .withOptionsFrom(*micDistanceRelay)
         .withOptionsFrom(*cabStyleRelay)
@@ -285,6 +308,18 @@ void BeccaToneAmpEditor::setupRelaysAndAttachments()
         *apvts.getParameter(ParamIDs::bypass), *bypassRelay, nullptr);
     presetAttachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
         *apvts.getParameter(ParamIDs::preset), *presetRelay, nullptr);
+
+    // Pedal Slots
+    pedalSlot0Attachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+        *apvts.getParameter(ParamIDs::pedalSlot0), *pedalSlot0Relay, nullptr);
+    pedalSlot1Attachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+        *apvts.getParameter(ParamIDs::pedalSlot1), *pedalSlot1Relay, nullptr);
+    pedalSlot2Attachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+        *apvts.getParameter(ParamIDs::pedalSlot2), *pedalSlot2Relay, nullptr);
+    pedalSlot3Attachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+        *apvts.getParameter(ParamIDs::pedalSlot3), *pedalSlot3Relay, nullptr);
+    pedalSlot4Attachment = std::make_unique<juce::WebComboBoxParameterAttachment>(
+        *apvts.getParameter(ParamIDs::pedalSlot4), *pedalSlot4Relay, nullptr);
 
     // Advanced
     expertModeAttachment = std::make_unique<juce::WebToggleButtonParameterAttachment>(

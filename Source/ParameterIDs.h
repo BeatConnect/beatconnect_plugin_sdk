@@ -75,6 +75,16 @@ namespace ParamIDs
     inline constexpr const char* preset = "preset";
 
     // ===========================================================================
+    // Pedal Slots (order in signal chain)
+    // Each slot stores which pedal is in that position (0-4)
+    // ===========================================================================
+    inline constexpr const char* pedalSlot0 = "pedal_slot_0";
+    inline constexpr const char* pedalSlot1 = "pedal_slot_1";
+    inline constexpr const char* pedalSlot2 = "pedal_slot_2";
+    inline constexpr const char* pedalSlot3 = "pedal_slot_3";
+    inline constexpr const char* pedalSlot4 = "pedal_slot_4";
+
+    // ===========================================================================
     // Advanced Controls (Expert Mode)
     // ===========================================================================
     inline constexpr const char* expertMode    = "expert_mode";
@@ -104,6 +114,21 @@ namespace PresetNames
         "Funk Groove",
         "Indie Grit"
     };
+}
+
+// Pedal IDs for slot selection (order matches UI: distortion=0, chorus=1, tremolo=2, delay=3, reverb=4)
+namespace PedalSlots
+{
+    inline const juce::StringArray pedalIds {
+        "distortion",
+        "chorus",
+        "tremolo",
+        "delay",
+        "reverb"
+    };
+
+    // Default pedal order (distortion -> chorus -> tremolo -> delay -> reverb)
+    inline constexpr int defaultOrder[5] = { 0, 1, 2, 3, 4 };
 }
 
 // Cabinet style options

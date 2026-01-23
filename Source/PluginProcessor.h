@@ -143,13 +143,47 @@ private:
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> delayLine { 96000 };
     float delaySmoothedTime = 0.0f;
 
-    // Reverb
-    juce::dsp::Reverb reverb;
-    juce::dsp::Reverb::Parameters reverbParams;
+    // FDN Reverb (8-line Feedback Delay Network for smooth, lush reverb)
+    static constexpr int kFDNSize = 8;
+    static constexpr float kFDNDelayMs[kFDNSize] = { 29.7f, 37.1f, 41.1f, 43.7f, 53.0f, 59.9f, 67.7f, 79.3f };
+    static constexpr float kHadamard = 0.35355339f; // 1/sqrt(8) for energy-preserving mixing
+    std::array<juce::AudioBuffer<float>, kFDNSize> fdnDelayLines;
+    std::array<int, kFDNSize> fdnWritePos;
+    std::array<int, kFDNSize> fdnDelaySamples;
+    std::array<float, kFDNSize> fdnFilterState;  // Damping filters
+    float reverbLfoPhase = 0.0f;
 
-    // Distortion/Fuzz pedal
+    // Early reflections
+    static constexpr int kNumEarlyTaps = 12;
+    juce::AudioBuffer<float> earlyReflectionBuffer;
+    int earlyWritePos = 0;
+    std::array<int, kNumEarlyTaps> earlyTapDelaysL;
+    std::array<int, kNumEarlyTaps> earlyTapDelaysR;
+    std::array<float, kNumEarlyTaps> earlyTapGainsL;
+    std::array<float, kNumEarlyTaps> earlyTapGainsR;
+
+    // Reverb pre-delay
+    juce::AudioBuffer<float> reverbPreDelayBuffer;
+    int reverbPreDelayWritePos = 0;
+
+    // Input diffusion allpasses
+    static constexpr int kNumInputDiffusers = 3;
+    std::array<juce::AudioBuffer<float>, kNumInputDiffusers> inputDiffBuffersL;
+    std::array<juce::AudioBuffer<float>, kNumInputDiffusers> inputDiffBuffersR;
+    std::array<int, kNumInputDiffusers> inputDiffWritePosL;
+    std::array<int, kNumInputDiffusers> inputDiffWritePosR;
+    std::array<int, kNumInputDiffusers> inputDiffDelays;
+
+    // Smoothed reverb parameters
+    juce::SmoothedValue<float> smoothedReverbMix;
+    juce::SmoothedValue<float> smoothedReverbSize;
+    juce::SmoothedValue<float> smoothedReverbDamping;
+
+    // Distortion/Fuzz pedal (70s vintage style)
     juce::dsp::WaveShaper<float> distortionShaper;
     juce::dsp::IIR::Filter<float> distortionToneFilterL, distortionToneFilterR;
+    juce::dsp::IIR::Filter<float> distortionInputFilterL, distortionInputFilterR;  // Pre-filter for warmth
+    juce::dsp::IIR::Filter<float> distortionOutputFilterL, distortionOutputFilterR;  // Post-filter for smoothing
 
     // Advanced EQ (8-band parametric)
     std::array<juce::dsp::IIR::Filter<float>, 8> eqFiltersL;
@@ -177,6 +211,8 @@ private:
     void processAmpStage(juce::AudioBuffer<float>& buffer);
     void processAdvancedEQ(juce::AudioBuffer<float>& buffer);
     float softClip(float x);
+    float processTubeSaturation(float sample, float drive, float bias);
+    float processAllpass(float input, float* buffer, int& writePos, int bufSize, int delaySamples, float feedback);
 
     //==============================================================================
     // Preset handling

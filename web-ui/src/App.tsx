@@ -5,8 +5,8 @@
  * Warm, buttery amp with pedals for soulful fusion, funk, R&B, and blues.
  */
 
-import { useState, memo } from 'react';
-import { Reorder, motion, AnimatePresence } from 'framer-motion';
+import { useState, memo, useCallback } from 'react';
+import { Reorder, motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useSliderParam, useToggleParam, useComboParam, useVisualizerData } from './hooks/useJuceParam';
 import { Knob } from './components/Knob';
 import { Pedal } from './components/Pedal';
@@ -14,6 +14,10 @@ import { TubeGlow } from './components/TubeGlow';
 import { PresetSelector } from './components/PresetSelector';
 import { Visualizer } from './components/Visualizer';
 import { CONTROL_TOOLTIPS } from './components/Tooltip';
+import { LogoText } from './components/LogoText';
+import { DragProvider, useDragContext } from './contexts/DragContext';
+import { usePedalOrder, reorderPedalConfigs, pedalConfigsToIds, PedalId } from './hooks/usePedalOrder';
+import { useSparks } from './components/Sparks';
 
 // ==============================================================================
 // Parameter IDs (must match C++ ParameterIDs.h)
@@ -111,6 +115,19 @@ interface PedalItemProps {
 }
 
 const PedalItem = memo(function PedalItem({ pedal, enabled, onToggle, knobs, tooltipTitle, tooltipDescription }: PedalItemProps) {
+  // Use drag controls to only allow dragging from specific areas (not knobs)
+  const dragControls = useDragControls();
+
+  // Only start drag if not clicking on a knob or interactive element
+  const handleDragStart = (e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    // Check if we clicked on a knob or any interactive element
+    const isKnob = target.closest('.knob, .knob-container, .pedal-knobs, .footswitch, .footswitch-button');
+    if (!isKnob) {
+      dragControls.start(e);
+    }
+  };
+
   return (
     <Reorder.Item
       value={pedal}
@@ -118,24 +135,61 @@ const PedalItem = memo(function PedalItem({ pedal, enabled, onToggle, knobs, too
       whileDrag={{ scale: 0.95, opacity: 0.8 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
       layout
+      dragListener={false}
+      dragControls={dragControls}
     >
-      <Pedal
-        name={pedal.name}
-        color={pedal.color}
-        enabled={enabled}
-        onToggle={onToggle}
-        knobs={knobs}
-        fontClass={pedal.fontClass}
-        tooltipTitle={tooltipTitle}
-        tooltipDescription={tooltipDescription}
-      />
+      {/* Drag handle area - the pedal body (not the knobs) */}
+      <div
+        className="pedal-drag-handle"
+        onPointerDown={handleDragStart}
+      >
+        <Pedal
+          name={pedal.name}
+          color={pedal.color}
+          enabled={enabled}
+          onToggle={onToggle}
+          knobs={knobs}
+          fontClass={pedal.fontClass}
+          tooltipTitle={tooltipTitle}
+          tooltipDescription={tooltipDescription}
+        />
+      </div>
     </Reorder.Item>
   );
 });
 
-function App() {
-  const [pedalOrder, setPedalOrder] = useState(INITIAL_PEDAL_ORDER);
+function AppContent() {
   const [showVisualizer, setShowVisualizer] = useState(false);
+  const { isDragging, setDragging } = useDragContext();
+
+  // Pedal order synced with C++ DSP
+  const { order: pedalOrderIds, setOrder: setPedalOrderIds } = usePedalOrder();
+
+  // Convert PedalId order to PedalConfig order for Reorder.Group
+  const pedalOrder = reorderPedalConfigs(INITIAL_PEDAL_ORDER, pedalOrderIds);
+
+  // Handle reorder from UI - sync to C++
+  const handlePedalReorder = useCallback((newConfigs: PedalConfig[]) => {
+    const newIds = pedalConfigsToIds(newConfigs);
+    setPedalOrderIds(newIds as PedalId[]);
+  }, [setPedalOrderIds]);
+
+  // Wrap drag callbacks to update context
+  const createDragCallbacks = useCallback((onDragStart?: () => void, onDragEnd?: () => void) => ({
+    onDragStart: () => {
+      setDragging(true);
+      onDragStart?.();
+    },
+    onDragEnd: () => {
+      setDragging(false);
+      onDragEnd?.();
+    },
+  }), [setDragging]);
+
+  // Spark effects
+  const metalSparks = useSparks('metal', 12);
+  const orangeSparks = useSparks('orange', 10);
+  const goldSparks = useSparks('gold', 8);
 
   // Amp parameters
   const gain = useSliderParam(ParamIDs.gain, { defaultValue: 0.35 });
@@ -263,7 +317,27 @@ function App() {
 
       {/* Main Amp Unit */}
       <main className="main-content">
-        <section className="amp-cabinet">
+        <section
+          className="amp-cabinet"
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            // Only trigger metal sparks on backplate elements (grill-controls background, amp-cabinet)
+            // Exclude knobs, tubes, logo, pedals, and other interactive elements
+            const isBackplate =
+              target.classList.contains('amp-cabinet') ||
+              target.classList.contains('grill-controls') ||
+              target.classList.contains('amp-grill') ||
+              target.classList.contains('grill-cloth') ||
+              target.classList.contains('grill-tube-glow');
+
+            if (isBackplate) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              metalSparks.triggerSparks(e.clientX - rect.left, e.clientY - rect.top);
+            }
+          }}
+        >
+          {metalSparks.SparkElements}
+
           {/* Grill Section - Logo at top, controls mounted on grill */}
           <div className="amp-grill">
             <div className="grill-cloth" />
@@ -272,28 +346,52 @@ function App() {
             <div className="grill-tube-glow" />
 
             {/* Logo at top of grill */}
-            <div className="grill-logo">
-              <span className="grill-logo-text">Becca Tone Amp</span>
+            <div
+              className="grill-logo"
+              onClick={(e) => {
+                // Only trigger gold sparks when clicking the logo text itself
+                const target = e.target as HTMLElement;
+                const isLogoText = target.classList.contains('logo-text-container') ||
+                                   target.classList.contains('logo-text-base') ||
+                                   target.classList.contains('logo-text-highlight') ||
+                                   target.closest('.logo-text-container');
+                if (isLogoText) {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  goldSparks.triggerSparks(e.clientX - rect.left, e.clientY - rect.top);
+                }
+              }}
+            >
+              {goldSparks.SparkElements}
+              <LogoText text="Becca Tone Amp" disabled={isDragging} />
             </div>
 
             {/* Controls mounted on the grill - tubes attached on left */}
             <div className="grill-controls">
               {/* Tube Bay - Attached to left side, sticking out top */}
-              <div className="tube-bay">
+              <div
+                className="tube-bay"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  orangeSparks.triggerSparks(e.clientX - rect.left, e.clientY - rect.top);
+                }}
+              >
+                {orangeSparks.SparkElements}
                 <TubeGlow level={vizData.inputLevel ?? 0} label="IN" />
                 <TubeGlow level={vizData.outputLevel ?? 0} label="OUT" />
               </div>
 
               {/* Knob Row - All knobs in one centered row */}
               <div className="amp-knobs">
-                <Knob value={gain.value} onChange={gain.setValue} onDragStart={gain.onDragStart} onDragEnd={gain.onDragEnd} label="Gain" defaultValue={DEFAULT_VALUES.gain} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.gain.title} tooltipDescription={CONTROL_TOOLTIPS.gain.description} />
-                <Knob value={bass.value} onChange={bass.setValue} onDragStart={bass.onDragStart} onDragEnd={bass.onDragEnd} label="Bass" defaultValue={DEFAULT_VALUES.bass} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.bass.title} tooltipDescription={CONTROL_TOOLTIPS.bass.description} />
-                <Knob value={mid.value} onChange={mid.setValue} onDragStart={mid.onDragStart} onDragEnd={mid.onDragEnd} label="Mid" defaultValue={DEFAULT_VALUES.mid} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.mid.title} tooltipDescription={CONTROL_TOOLTIPS.mid.description} />
-                <Knob value={treble.value} onChange={treble.setValue} onDragStart={treble.onDragStart} onDragEnd={treble.onDragEnd} label="Treble" defaultValue={DEFAULT_VALUES.treble} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.treble.title} tooltipDescription={CONTROL_TOOLTIPS.treble.description} />
-                <Knob value={presence.value} onChange={presence.setValue} onDragStart={presence.onDragStart} onDragEnd={presence.onDragEnd} label="Presence" defaultValue={DEFAULT_VALUES.presence} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.presence.title} tooltipDescription={CONTROL_TOOLTIPS.presence.description} />
-                <Knob value={compression.value} onChange={compression.setValue} onDragStart={compression.onDragStart} onDragEnd={compression.onDragEnd} label="Comp" defaultValue={DEFAULT_VALUES.compression} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.compression.title} tooltipDescription={CONTROL_TOOLTIPS.compression.description} />
-                <Knob value={level.value} onChange={level.setValue} onDragStart={level.onDragStart} onDragEnd={level.onDragEnd} label="Level" defaultValue={DEFAULT_VALUES.level} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.level.title} tooltipDescription={CONTROL_TOOLTIPS.level.description} />
-                <Knob value={volume.value} onChange={volume.setValue} onDragStart={volume.onDragStart} onDragEnd={volume.onDragEnd} label="Volume" defaultValue={DEFAULT_VALUES.volume} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.volume.title} tooltipDescription={CONTROL_TOOLTIPS.volume.description} />
+                <Knob value={gain.value} onChange={gain.setValue} {...createDragCallbacks(gain.onDragStart, gain.onDragEnd)} label="Gain" defaultValue={DEFAULT_VALUES.gain} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.gain.title} tooltipDescription={CONTROL_TOOLTIPS.gain.description} />
+                <Knob value={bass.value} onChange={bass.setValue} {...createDragCallbacks(bass.onDragStart, bass.onDragEnd)} label="Bass" defaultValue={DEFAULT_VALUES.bass} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.bass.title} tooltipDescription={CONTROL_TOOLTIPS.bass.description} />
+                <Knob value={mid.value} onChange={mid.setValue} {...createDragCallbacks(mid.onDragStart, mid.onDragEnd)} label="Mid" defaultValue={DEFAULT_VALUES.mid} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.mid.title} tooltipDescription={CONTROL_TOOLTIPS.mid.description} />
+                <Knob value={treble.value} onChange={treble.setValue} {...createDragCallbacks(treble.onDragStart, treble.onDragEnd)} label="Treble" defaultValue={DEFAULT_VALUES.treble} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.treble.title} tooltipDescription={CONTROL_TOOLTIPS.treble.description} />
+                <Knob value={presence.value} onChange={presence.setValue} {...createDragCallbacks(presence.onDragStart, presence.onDragEnd)} label="Presence" defaultValue={DEFAULT_VALUES.presence} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.presence.title} tooltipDescription={CONTROL_TOOLTIPS.presence.description} />
+                <Knob value={compression.value} onChange={compression.setValue} {...createDragCallbacks(compression.onDragStart, compression.onDragEnd)} label="Comp" defaultValue={DEFAULT_VALUES.compression} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.compression.title} tooltipDescription={CONTROL_TOOLTIPS.compression.description} />
+                <Knob value={level.value} onChange={level.setValue} {...createDragCallbacks(level.onDragStart, level.onDragEnd)} label="Level" defaultValue={DEFAULT_VALUES.level} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.level.title} tooltipDescription={CONTROL_TOOLTIPS.level.description} />
+                <Knob value={volume.value} onChange={volume.setValue} {...createDragCallbacks(volume.onDragStart, volume.onDragEnd)} label="Volume" defaultValue={DEFAULT_VALUES.volume} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.volume.title} tooltipDescription={CONTROL_TOOLTIPS.volume.description} />
               </div>
 
               {/* Power Switch */}
@@ -341,7 +439,7 @@ function App() {
                 <Reorder.Group
                   axis="x"
                   values={pedalOrder}
-                  onReorder={setPedalOrder}
+                  onReorder={handlePedalReorder}
                   className="pedals-row"
                   layoutScroll
                 >
@@ -397,6 +495,14 @@ function App() {
         </section>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <DragProvider>
+      <AppContent />
+    </DragProvider>
   );
 }
 

@@ -57,17 +57,21 @@ export function Knob({
     return `${percentage}`;
   };
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      // Stop propagation to prevent parent drag (framer-motion Reorder)
+  // Handle pointer down - prevents framer-motion Reorder from capturing the drag
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // CRITICAL: Stop propagation for both pointer and mouse events
+      // to prevent framer-motion Reorder from dragging the pedal
       e.stopPropagation();
+      e.preventDefault();
+
       isDragging.current = true;
       startY.current = e.clientY;
       startValue.current = value;
       setShowValue(true);
       onDragStart?.();
 
-      const handleMouseMove = (e: MouseEvent) => {
+      const handlePointerMove = (e: PointerEvent) => {
         if (!isDragging.current) return;
         const deltaY = startY.current - e.clientY;
         const sensitivity = 0.005;
@@ -75,16 +79,16 @@ export function Knob({
         onChange(newValue);
       };
 
-      const handleMouseUp = () => {
+      const handlePointerUp = () => {
         isDragging.current = false;
         setShowValue(false);
         onDragEnd?.();
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
       };
 
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
     },
     [value, min, max, onChange, onDragStart, onDragEnd]
   );
@@ -122,7 +126,8 @@ export function Knob({
           transform: `rotate(${rotation}deg)`,
           '--knob-color': color,
         } as React.CSSProperties}
-        onMouseDown={handleMouseDown}
+        onPointerDownCapture={handlePointerDown}
+        onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
       >
         <div className="knob-indicator" />

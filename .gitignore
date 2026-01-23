@@ -71,3 +71,6 @@ compile_commands.json
 
 # BeatConnect build artifacts (generated at build time by CI)
 resources/project_data.json
+
+# Audio samples (reference only, not for distribution)
+Becca_Samples/

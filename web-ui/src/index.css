@@ -214,42 +214,58 @@ body {
   text-align: center;
 }
 
-.grill-logo-text {
+/* Logo Text Container - Cursor-following metallic highlight */
+.logo-text-container {
+  position: relative;
+  display: inline-block;
+  cursor: default;
+  isolation: isolate;
+}
+
+/* Base logo text - always visible */
+.logo-text-base {
   font-family: var(--font-logo);
   font-size: 48px;
   font-weight: 400;
   letter-spacing: 2px;
-  /* Brighter gold metallic - more readable */
   color: transparent;
   background: linear-gradient(
     180deg,
-    #f5d080 0%,
-    #ffe8b0 20%,
-    #f0c860 40%,
-    #d4a040 60%,
-    #c09030 80%,
-    #a07020 100%
+    #d4a050 0%,
+    #c89840 20%,
+    #b08030 40%,
+    #a07028 60%,
+    #906820 80%,
+    #805818 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   text-shadow:
-    0 -1px 1px rgba(0, 0, 0, 0.5),
-    0 1px 1px rgba(255, 240, 180, 0.4),
-    0 0 30px rgba(255, 200, 100, 0.4);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-  transition: filter 300ms ease, text-shadow 300ms ease;
-  cursor: default;
+    0 -1px 1px rgba(0, 0, 0, 0.6),
+    0 1px 0 rgba(255, 220, 150, 0.15);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  transition: filter 400ms ease;
 }
 
-.grill-logo-text:hover {
-  text-shadow:
-    0 -1px 1px rgba(0, 0, 0, 0.5),
-    0 1px 1px rgba(255, 240, 180, 0.5),
-    0 0 40px rgba(255, 210, 120, 0.7),
-    0 0 60px rgba(255, 200, 100, 0.5),
-    0 0 80px rgba(255, 180, 80, 0.3);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) brightness(1.15);
+/* Highlight layer - positioned on top, clips to text */
+.logo-text-highlight {
+  position: absolute;
+  inset: 0;
+  font-family: var(--font-logo);
+  font-size: 48px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  color: transparent;
+  background: var(--highlight-gradient, transparent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: var(--highlight-opacity, 0);
+  transition: opacity 200ms ease-out;
+  pointer-events: none;
+  mix-blend-mode: overlay;
 }
+
+/* No global change on hover - keep the highlight fully cursor-localized */
 
 /* Controls mounted on the grill - dark metal faceplate */
 .grill-controls {
@@ -539,23 +555,12 @@ body {
 }
 
 .tube-pins {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 30px;
-  height: 30px;
+  /* Hide pins - they looked like odd spokes */
+  display: none;
 }
 
 .tube-pin {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 3px;
-  height: 6px;
-  background: linear-gradient(180deg, #888, #555);
-  border-radius: 0 0 1px 1px;
-  transform-origin: center center;
+  display: none;
 }
 
 .tube-base-center {
@@ -620,11 +625,19 @@ body {
 .knob {
   position: relative;
   border-radius: 50%;
-  cursor: pointer;
+  cursor: grab;
   will-change: transform;
+  /* Prevent browser gestures from interfering with knob drag */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   /* Simple flat metal look - no expensive effects */
   background: #484440;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.knob:active {
+  cursor: grabbing;
 }
 
 /* Inner colored cap - static, simple */
@@ -892,6 +905,15 @@ body {
 }
 
 .pedal-wrapper:active { cursor: grabbing; }
+
+.pedal-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.pedal-drag-handle:active {
+  cursor: grabbing;
+}
 
 /* ==============================================================================
    Pedal Component

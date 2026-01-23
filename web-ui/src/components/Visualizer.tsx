@@ -29,11 +29,27 @@ export function Visualizer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const spectrumRef = useRef<number[]>([]);
+  const smoothedSpectrumRef = useRef<number[]>([]);
 
-  // Update spectrum ref when new data arrives
+  // Smoothing factor (0 = no smoothing, 1 = infinite smoothing)
+  const SMOOTHING = 0.8;
+
+  // Update spectrum ref with smoothing when new data arrives
   useEffect(() => {
     if (spectrum && spectrum.length > 0) {
       spectrumRef.current = spectrum;
+
+      // Initialize smoothed spectrum if needed
+      if (smoothedSpectrumRef.current.length !== spectrum.length) {
+        smoothedSpectrumRef.current = [...spectrum];
+      } else {
+        // Apply exponential smoothing
+        for (let i = 0; i < spectrum.length; i++) {
+          smoothedSpectrumRef.current[i] =
+            SMOOTHING * smoothedSpectrumRef.current[i] +
+            (1 - SMOOTHING) * spectrum[i];
+        }
+      }
     }
   }, [spectrum]);
 
@@ -54,11 +70,12 @@ export function Visualizer({
     // Clear
     ctx.clearRect(0, 0, width, height);
 
-    // Draw REAL spectrum from FFT data
-    const spectrumData = spectrumRef.current;
+    // Draw REAL spectrum from FFT data (smoothed)
+    const spectrumData = smoothedSpectrumRef.current;
     if (spectrumData && spectrumData.length > 0) {
-      // Draw spectrum as filled area
+      // Draw spectrum as filled area FROM THE BOTTOM
       ctx.beginPath();
+      // Start at bottom-left corner
       ctx.moveTo(padding.left, height - padding.bottom);
 
       const numBins = spectrumData.length;
@@ -68,28 +85,27 @@ export function Visualizer({
         const t = Math.log10(Math.max(20, freq) / 20) / Math.log10(20000 / 20);
         const x = padding.left + t * graphWidth;
 
-        // Map magnitude to y position
+        // Map magnitude to y position (higher magnitude = lower y = taller bar from bottom)
         const magnitude = spectrumData[i] || 0;
         const y = height - padding.bottom - (magnitude * graphHeight * 0.8);
 
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+        // Always use lineTo to connect from bottom baseline through all points
+        ctx.lineTo(x, y);
       }
 
+      // Close path: go to bottom-right, then back to bottom-left
       ctx.lineTo(width - padding.right, height - padding.bottom);
       ctx.closePath();
 
-      // Gradient fill for spectrum
-      const specGradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
-      specGradient.addColorStop(0, 'rgba(255, 200, 100, 0.3)');
-      specGradient.addColorStop(1, 'rgba(255, 200, 100, 0.05)');
+      // Grayscale gradient fill for spectrum (darker at bottom where the fill is, lighter at top)
+      const specGradient = ctx.createLinearGradient(0, height - padding.bottom, 0, padding.top);
+      specGradient.addColorStop(0, 'rgba(100, 100, 100, 0.5)');  // Darker at bottom (base)
+      specGradient.addColorStop(0.5, 'rgba(140, 140, 140, 0.25)');
+      specGradient.addColorStop(1, 'rgba(180, 180, 180, 0.05)'); // Fade out at top
       ctx.fillStyle = specGradient;
       ctx.fill();
 
-      // Draw spectrum line
+      // Draw spectrum line in grayscale
       ctx.beginPath();
       for (let i = 0; i < numBins; i++) {
         const freq = (i / numBins) * 20000;
@@ -104,12 +120,12 @@ export function Visualizer({
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = 'rgba(255, 200, 100, 0.4)';
+      ctx.strokeStyle = 'rgba(160, 160, 160, 0.5)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else {
       // No spectrum data yet - show subtle placeholder
-      ctx.fillStyle = 'rgba(255, 200, 100, 0.05)';
+      ctx.fillStyle = 'rgba(150, 150, 150, 0.1)';
       ctx.font = '10px DM Sans';
       ctx.textAlign = 'center';
       ctx.fillText('Waiting for audio...', width / 2, height / 2);

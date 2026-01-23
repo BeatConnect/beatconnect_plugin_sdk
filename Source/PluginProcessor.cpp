@@ -270,6 +270,32 @@ juce::AudioProcessorValueTreeState::ParameterLayout BeccaToneAmpProcessor::creat
     ));
 
     // ===========================================================================
+    // Pedal Slots (signal chain order)
+    // Not automatable to avoid glitches during playback
+    // ===========================================================================
+    auto slotAttributes = juce::AudioParameterChoiceAttributes().withAutomatable(false);
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamIDs::pedalSlot0, 1 },
+        "Pedal Slot 1", PedalSlots::pedalIds, 0, slotAttributes));  // distortion
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamIDs::pedalSlot1, 1 },
+        "Pedal Slot 2", PedalSlots::pedalIds, 1, slotAttributes));  // chorus
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamIDs::pedalSlot2, 1 },
+        "Pedal Slot 3", PedalSlots::pedalIds, 2, slotAttributes));  // tremolo
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamIDs::pedalSlot3, 1 },
+        "Pedal Slot 4", PedalSlots::pedalIds, 3, slotAttributes));  // delay
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParamIDs::pedalSlot4, 1 },
+        "Pedal Slot 5", PedalSlots::pedalIds, 4, slotAttributes));  // reverb
+
+    // ===========================================================================
     // Advanced Controls (Expert Mode)
     // ===========================================================================
     params.push_back(std::make_unique<juce::AudioParameterBool>(
@@ -394,8 +420,70 @@ void BeccaToneAmpProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
     delayLine.prepare(currentSpec);
     delayLine.setMaximumDelayInSamples(static_cast<int>(sampleRate * 2.0));
 
-    // Reverb
-    reverb.prepare(currentSpec);
+    // FDN Reverb initialization
+    float srScale = static_cast<float>(sampleRate) / 44100.0f;
+
+    // Initialize FDN delay lines
+    int maxFDNSize = static_cast<int>(100.0f * sampleRate / 1000.0f) + 512; // 100ms max
+    for (int i = 0; i < kFDNSize; ++i)
+    {
+        fdnDelayLines[i].setSize(1, maxFDNSize);
+        fdnDelayLines[i].clear();
+        fdnWritePos[i] = 0;
+        fdnDelaySamples[i] = static_cast<int>(kFDNDelayMs[i] * sampleRate / 1000.0f);
+        fdnFilterState[i] = 0.0f;
+    }
+
+    // Early reflections buffer
+    static const float earlyTapTimesL[] = { 1.9f, 4.3f, 6.1f, 8.7f, 11.3f, 14.7f, 18.1f, 22.9f, 27.3f, 33.1f, 39.7f, 47.3f };
+    static const float earlyTapTimesR[] = { 2.7f, 5.1f, 7.3f, 9.9f, 12.7f, 16.1f, 20.3f, 25.1f, 30.7f, 36.3f, 43.1f, 51.7f };
+    static const float earlyTapGainsLInit[] = { 0.82f, 0.71f, 0.67f, 0.59f, 0.53f, 0.47f, 0.41f, 0.35f, 0.29f, 0.23f, 0.18f, 0.13f };
+    static const float earlyTapGainsRInit[] = { 0.79f, 0.73f, 0.64f, 0.57f, 0.51f, 0.44f, 0.38f, 0.32f, 0.26f, 0.21f, 0.16f, 0.11f };
+
+    int earlySize = static_cast<int>(60.0 * sampleRate / 1000.0) + 512;
+    earlyReflectionBuffer.setSize(2, earlySize);
+    earlyReflectionBuffer.clear();
+    earlyWritePos = 0;
+
+    for (int i = 0; i < kNumEarlyTaps; ++i)
+    {
+        earlyTapDelaysL[i] = static_cast<int>(earlyTapTimesL[i] * sampleRate / 1000.0);
+        earlyTapDelaysR[i] = static_cast<int>(earlyTapTimesR[i] * sampleRate / 1000.0);
+        earlyTapGainsL[i] = earlyTapGainsLInit[i];
+        earlyTapGainsR[i] = earlyTapGainsRInit[i];
+    }
+
+    // Pre-delay buffer (up to 100ms)
+    int preDelaySize = static_cast<int>(100.0 * sampleRate / 1000.0) + 512;
+    reverbPreDelayBuffer.setSize(2, preDelaySize);
+    reverbPreDelayBuffer.clear();
+    reverbPreDelayWritePos = 0;
+
+    // Input diffusion allpasses
+    static const int inputDiffDelaysInit[] = { 142, 107, 379 };
+    int maxInputDiffSize = static_cast<int>(400 * srScale) + 128;
+    for (int i = 0; i < kNumInputDiffusers; ++i)
+    {
+        inputDiffBuffersL[i].setSize(1, maxInputDiffSize);
+        inputDiffBuffersR[i].setSize(1, maxInputDiffSize);
+        inputDiffBuffersL[i].clear();
+        inputDiffBuffersR[i].clear();
+        inputDiffWritePosL[i] = 0;
+        inputDiffWritePosR[i] = 0;
+        inputDiffDelays[i] = static_cast<int>(inputDiffDelaysInit[i] * srScale);
+    }
+
+    // Smoothed reverb parameters
+    smoothedReverbMix.reset(sampleRate, 0.05);
+    smoothedReverbSize.reset(sampleRate, 0.05);
+    smoothedReverbDamping.reset(sampleRate, 0.05);
+    reverbLfoPhase = 0.0f;
+
+    // Initialize distortion filters for 70s warmth
+    distortionInputFilterL.prepare(currentSpec);
+    distortionInputFilterR.prepare(currentSpec);
+    distortionOutputFilterL.prepare(currentSpec);
+    distortionOutputFilterR.prepare(currentSpec);
 
     // Initialize EQ filters
     updateFilters();
@@ -410,8 +498,18 @@ void BeccaToneAmpProcessor::prepareToPlay(double sampleRate, int samplesPerBlock
 void BeccaToneAmpProcessor::releaseResources()
 {
     delayLine.reset();
-    reverb.reset();
     chorus.reset();
+
+    // Clear FDN reverb buffers
+    for (int i = 0; i < kFDNSize; ++i)
+        fdnDelayLines[i].clear();
+    earlyReflectionBuffer.clear();
+    reverbPreDelayBuffer.clear();
+    for (int i = 0; i < kNumInputDiffusers; ++i)
+    {
+        inputDiffBuffersL[i].clear();
+        inputDiffBuffersR[i].clear();
+    }
 }
 
 bool BeccaToneAmpProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -476,6 +574,67 @@ float BeccaToneAmpProcessor::softClip(float x)
     else if (x < -1.0f)
         return -1.0f + std::exp(-1.0f - x);
     return x;
+}
+
+float BeccaToneAmpProcessor::processAllpass(float input, float* buffer, int& writePos, int bufSize, int delaySamples, float feedback)
+{
+    delaySamples = juce::jmin(delaySamples, bufSize - 1);
+    int readPos = writePos - delaySamples;
+    if (readPos < 0) readPos += bufSize;
+
+    float bufOut = buffer[readPos];
+    float output = -input + bufOut;
+    buffer[writePos] = input + bufOut * feedback;
+
+    if (++writePos >= bufSize)
+        writePos = 0;
+
+    return output;
+}
+
+float BeccaToneAmpProcessor::processTubeSaturation(float sample, float drive, float bias)
+{
+    // Triode tube saturation - warm, asymmetric, even harmonics dominant
+    // Models the transfer curve of a 12AX7-style preamp tube
+
+    // Input stage - tubes have input capacitance that warms the signal
+    float warmth = sample * 0.95f + bias * 0.05f;
+
+    // Drive amount: 0-1 maps to 1-10x saturation
+    float driveAmount = 1.0f + drive * 9.0f;
+    float input = warmth * driveAmount;
+
+    // Triode transfer function - asymmetric with soft positive clip, harder negative
+    float shaped;
+    if (input >= 0.0f)
+    {
+        // Positive half: soft, gradual compression (plate saturation)
+        // More headroom, gentle rolloff - the "warm" side
+        float x = input * 0.7f;
+        shaped = x / (1.0f + 0.28f * x * x);  // Soft rational curve
+
+        // Add 2nd harmonic (even) - signature of tube warmth
+        shaped += 0.15f * driveAmount * shaped * std::abs(shaped);
+    }
+    else
+    {
+        // Negative half: harder clip (grid conduction)
+        // This is where tubes "bite" - more abrupt limiting
+        float x = -input * 0.9f;
+        float limited = x / (1.0f + x);  // Harder curve
+        shaped = -limited;
+
+        // Grid blocking - reduces negative peaks more at high drive
+        float gridBlock = 1.0f - 0.3f * driveAmount * limited * limited;
+        shaped *= juce::jmax(0.3f, gridBlock);
+    }
+
+    // Plate sag simulation - compression increases with level
+    float sagAmount = 0.1f * driveAmount * std::abs(shaped);
+    shaped *= 1.0f / (1.0f + sagAmount);
+
+    // Final soft limit (output transformer saturation)
+    return shaped / (1.0f + 0.2f * std::abs(shaped));
 }
 
 void BeccaToneAmpProcessor::processAmpStage(juce::AudioBuffer<float>& buffer)
@@ -581,36 +740,55 @@ void BeccaToneAmpProcessor::processDistortion(juce::AudioBuffer<float>& buffer)
 
     auto sampleRate = currentSpec.sampleRate;
 
-    // Tone control: low-pass filter
-    float toneFreq = 500.0f + tone * 4500.0f; // 500 Hz to 5 kHz
-    auto toneCoeffs = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, toneFreq);
+    // 70s tube-style fuzz - warm, crunchy, even harmonics
+    // Pre-filter: slight bass boost for warmth before saturation
+    float inputFreq = 200.0f + (1.0f - drive) * 300.0f;  // Lower cutoff with more drive
+    auto inputCoeffs = juce::dsp::IIR::Coefficients<float>::makeLowShelf(
+        sampleRate, inputFreq, 0.707f, juce::Decibels::decibelsToGain(3.0f + drive * 3.0f));
+    *distortionInputFilterL.coefficients = *inputCoeffs;
+    *distortionInputFilterR.coefficients = *inputCoeffs;
+
+    // Tone control: low-pass after saturation (controls brightness)
+    // 700 Hz (dark) to 5 kHz (bright), with gentle slope
+    float toneFreq = 800.0f + tone * 4200.0f;
+    auto toneCoeffs = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, toneFreq, 0.5f);
     *distortionToneFilterL.coefficients = *toneCoeffs;
     *distortionToneFilterR.coefficients = *toneCoeffs;
+
+    // Output filter: gentle high-frequency rolloff to prevent harshness
+    float outputFreq = 6000.0f + tone * 4000.0f;
+    auto outputCoeffs = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, outputFreq, 0.707f);
+    *distortionOutputFilterL.coefficients = *outputCoeffs;
+    *distortionOutputFilterR.coefficients = *outputCoeffs;
+
+    // Slight asymmetric bias for even harmonics (tube character)
+    float bias = 0.02f + drive * 0.03f;
 
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
     {
         float* channelData = buffer.getWritePointer(channel);
+        auto& inputFilter = (channel == 0) ? distortionInputFilterL : distortionInputFilterR;
+        auto& toneFilter = (channel == 0) ? distortionToneFilterL : distortionToneFilterR;
+        auto& outputFilter = (channel == 0) ? distortionOutputFilterL : distortionOutputFilterR;
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             float input = channelData[sample];
 
-            // Apply drive
-            float driven = input * (1.0f + drive * 10.0f);
+            // Pre-filter for warmth
+            input = inputFilter.processSample(input);
 
-            // Fuzz-style distortion
-            if (driven > 0.0f)
-                driven = 1.0f - std::exp(-driven * 2.0f);
-            else
-                driven = -1.0f + std::exp(driven * 1.8f);
+            // Tube saturation (warm, asymmetric clipping)
+            float saturated = processTubeSaturation(input, drive, bias);
 
-            // Tone filter
-            if (channel == 0)
-                driven = distortionToneFilterL.processSample(driven);
-            else
-                driven = distortionToneFilterR.processSample(driven);
+            // Tone shaping
+            saturated = toneFilter.processSample(saturated);
 
-            channelData[sample] = driven * level;
+            // Final smoothing to prevent any remaining harshness
+            saturated = outputFilter.processSample(saturated);
+
+            // Output level with slight makeup gain
+            channelData[sample] = saturated * level * 0.85f;
         }
     }
 }
@@ -699,16 +877,160 @@ void BeccaToneAmpProcessor::processReverb(juce::AudioBuffer<float>& buffer)
     auto damping = apvts.getRawParameterValue(ParamIDs::reverbDamping)->load();
     auto mix = apvts.getRawParameterValue(ParamIDs::reverbMix)->load();
 
-    reverbParams.roomSize = size;
-    reverbParams.damping = damping;
-    reverbParams.wetLevel = mix;
-    reverbParams.dryLevel = 1.0f - mix * 0.5f;
-    reverbParams.width = 1.0f;
-    reverb.setParameters(reverbParams);
+    // Update smoothed values
+    smoothedReverbSize.setTargetValue(size);
+    smoothedReverbDamping.setTargetValue(damping);
+    smoothedReverbMix.setTargetValue(mix);
 
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> context(block);
-    reverb.process(context);
+    auto sampleRate = currentSpec.sampleRate;
+    int numSamples = buffer.getNumSamples();
+    int numChannels = buffer.getNumChannels();
+
+    float* outL = numChannels > 0 ? buffer.getWritePointer(0) : nullptr;
+    float* outR = numChannels > 1 ? buffer.getWritePointer(1) : outL;
+
+    int earlyBufSize = earlyReflectionBuffer.getNumSamples();
+    float* earlyBufL = earlyReflectionBuffer.getWritePointer(0);
+    float* earlyBufR = earlyReflectionBuffer.getWritePointer(1);
+
+    // Modulation rate for lush, smooth reverb
+    float modRate = 0.5f;
+    float modDepth = 0.3f;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float dryL = outL ? outL[i] : 0.0f;
+        float dryR = outR ? outR[i] : 0.0f;
+
+        float currentMix = smoothedReverbMix.getNextValue();
+        float currentSize = smoothedReverbSize.getNextValue();
+        float currentDamping = smoothedReverbDamping.getNextValue();
+
+        // === Early Reflections ===
+        earlyBufL[earlyWritePos] = dryL;
+        earlyBufR[earlyWritePos] = dryR;
+
+        float earlyL = 0.0f, earlyR = 0.0f;
+        for (int t = 0; t < kNumEarlyTaps; ++t)
+        {
+            int readPosL = earlyWritePos - static_cast<int>(earlyTapDelaysL[t] * currentSize);
+            int readPosR = earlyWritePos - static_cast<int>(earlyTapDelaysR[t] * currentSize);
+            if (readPosL < 0) readPosL += earlyBufSize;
+            if (readPosR < 0) readPosR += earlyBufSize;
+
+            earlyL += earlyBufL[readPosL] * earlyTapGainsL[t] + earlyBufR[readPosR] * earlyTapGainsR[t] * 0.15f;
+            earlyR += earlyBufR[readPosR] * earlyTapGainsR[t] + earlyBufL[readPosL] * earlyTapGainsL[t] * 0.15f;
+        }
+        earlyL *= 0.4f;
+        earlyR *= 0.4f;
+
+        if (++earlyWritePos >= earlyBufSize)
+            earlyWritePos = 0;
+
+        // === Input Diffusion ===
+        float diffInL = dryL;
+        float diffInR = dryR;
+        float inputDiffFeedback = 0.6f;
+
+        for (int d = 0; d < kNumInputDiffusers; ++d)
+        {
+            int bufSizeL = inputDiffBuffersL[d].getNumSamples();
+            int bufSizeR = inputDiffBuffersR[d].getNumSamples();
+
+            diffInL = processAllpass(diffInL, inputDiffBuffersL[d].getWritePointer(0),
+                                      inputDiffWritePosL[d], bufSizeL, inputDiffDelays[d], inputDiffFeedback);
+            diffInR = processAllpass(diffInR, inputDiffBuffersR[d].getWritePointer(0),
+                                      inputDiffWritePosR[d], bufSizeR, inputDiffDelays[d], inputDiffFeedback);
+        }
+
+        // === FDN (Feedback Delay Network) ===
+        // LFO for gentle modulation
+        float lfo = std::sin(reverbLfoPhase * juce::MathConstants<float>::twoPi);
+        float lfoInc = modRate / static_cast<float>(sampleRate);
+        reverbLfoPhase += lfoInc;
+        if (reverbLfoPhase >= 1.0f) reverbLfoPhase -= 1.0f;
+
+        // Calculate feedback from decay time (size controls decay)
+        float decayTime = 0.5f + currentSize * 4.5f;  // 0.5s to 5s
+        float avgDelayMs = 50.0f * currentSize;
+        float feedback = std::pow(10.0f, -3.0f * (avgDelayMs / 1000.0f) / juce::jmax(decayTime, 0.1f));
+        feedback = juce::jlimit(0.0f, 0.95f, feedback);  // Conservative limit for stability
+
+        // Read outputs from all FDN delay lines
+        std::array<float, kFDNSize> delayOuts;
+        for (int j = 0; j < kFDNSize; ++j)
+        {
+            int bufSize = fdnDelayLines[j].getNumSamples();
+            float* buf = fdnDelayLines[j].getWritePointer(0);
+
+            // Modulate delay time slightly for lushness
+            float modAmount = lfo * modDepth * 0.02f * ((j % 2) == 0 ? 1.0f : -1.0f);
+            int delaySamp = static_cast<int>(fdnDelaySamples[j] * currentSize * (1.0f + modAmount));
+            delaySamp = juce::jlimit(1, bufSize - 1, delaySamp);
+
+            int readPos = fdnWritePos[j] - delaySamp;
+            if (readPos < 0) readPos += bufSize;
+
+            float out = buf[readPos];
+
+            // Damping filter (one-pole lowpass)
+            fdnFilterState[j] = out * (1.0f - currentDamping) + fdnFilterState[j] * currentDamping;
+            delayOuts[j] = fdnFilterState[j];
+        }
+
+        // Hadamard mixing matrix (8x8) - creates dense, smooth reverb
+        std::array<float, kFDNSize> mixed;
+        for (int j = 0; j < kFDNSize; ++j)
+        {
+            mixed[j] = 0.0f;
+            for (int k = 0; k < kFDNSize; ++k)
+            {
+                // Proper Hadamard sign pattern using popcount
+                int popcount = 0;
+                int val = j & k;
+                while (val) { popcount += val & 1; val >>= 1; }
+                float sign = (popcount % 2 == 0) ? 1.0f : -1.0f;
+                mixed[j] += delayOuts[k] * sign;
+            }
+            mixed[j] *= kHadamard; // Normalize for energy preservation
+        }
+
+        // Write back to FDN delay lines with input injection
+        float inputL = diffInL * 0.4f;
+        float inputR = diffInR * 0.4f;
+
+        for (int j = 0; j < kFDNSize; ++j)
+        {
+            int bufSize = fdnDelayLines[j].getNumSamples();
+            float* buf = fdnDelayLines[j].getWritePointer(0);
+
+            float input = (j < 4) ? inputL : inputR;
+            buf[fdnWritePos[j]] = input + mixed[j] * feedback;
+
+            if (++fdnWritePos[j] >= bufSize)
+                fdnWritePos[j] = 0;
+        }
+
+        // FDN output: sum specific delay lines for stereo
+        float lateL = (delayOuts[0] + delayOuts[2] + delayOuts[4] + delayOuts[6]) * 0.3f;
+        float lateR = (delayOuts[1] + delayOuts[3] + delayOuts[5] + delayOuts[7]) * 0.3f;
+
+        // Mix early and late reflections (30% early, 70% late)
+        float wetL = earlyL * 0.3f + lateL * 0.7f;
+        float wetR = earlyR * 0.3f + lateR * 0.7f;
+
+        // Stereo width enhancement
+        float mid = (wetL + wetR) * 0.5f;
+        float side = (wetL - wetR) * 0.5f;
+        float width = 0.8f + currentSize * 0.4f;
+        side *= width;
+        wetL = mid + side;
+        wetR = mid - side;
+
+        // Final wet/dry mix
+        if (outL) outL[i] = dryL * (1.0f - currentMix) + wetL * currentMix;
+        if (outR) outR[i] = dryR * (1.0f - currentMix) + wetR * currentMix;
+    }
 }
 
 void BeccaToneAmpProcessor::processAdvancedEQ(juce::AudioBuffer<float>& buffer)
@@ -792,23 +1114,33 @@ void BeccaToneAmpProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         return;
     }
 
-    // Signal chain:
-    // 1. Distortion pedal (before amp)
-    processDistortion(buffer);
+    // Get pedal order from parameters
+    int pedalOrder[5];
+    pedalOrder[0] = static_cast<int>(apvts.getRawParameterValue(ParamIDs::pedalSlot0)->load());
+    pedalOrder[1] = static_cast<int>(apvts.getRawParameterValue(ParamIDs::pedalSlot1)->load());
+    pedalOrder[2] = static_cast<int>(apvts.getRawParameterValue(ParamIDs::pedalSlot2)->load());
+    pedalOrder[3] = static_cast<int>(apvts.getRawParameterValue(ParamIDs::pedalSlot3)->load());
+    pedalOrder[4] = static_cast<int>(apvts.getRawParameterValue(ParamIDs::pedalSlot4)->load());
 
-    // 2. Amp stage (gain, EQ, compression)
+    // Process pedals in dynamic order
+    // Pedal IDs: 0=distortion, 1=chorus, 2=tremolo, 3=delay, 4=reverb
+    for (int slot = 0; slot < 5; ++slot)
+    {
+        switch (pedalOrder[slot])
+        {
+            case 0: processDistortion(buffer); break;
+            case 1: processChorus(buffer); break;
+            case 2: processTremolo(buffer); break;
+            case 3: processDelay(buffer); break;
+            case 4: processReverb(buffer); break;
+        }
+    }
+
+    // Amp stage (gain, EQ, compression) - always after pedals
     processAmpStage(buffer);
 
-    // 3. Advanced EQ (if expert mode)
+    // Advanced EQ (if expert mode)
     processAdvancedEQ(buffer);
-
-    // 4. Modulation effects
-    processChorus(buffer);
-    processTremolo(buffer);
-
-    // 5. Time-based effects
-    processDelay(buffer);
-    processReverb(buffer);
 
     // Calculate output level
     float outLevel = 0.0f;

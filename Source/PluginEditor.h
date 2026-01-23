@@ -79,6 +79,13 @@ private:
     std::unique_ptr<juce::WebToggleButtonRelay> bypassRelay;
     std::unique_ptr<juce::WebComboBoxRelay> presetRelay;
 
+    // Pedal Slots (signal chain order)
+    std::unique_ptr<juce::WebComboBoxRelay> pedalSlot0Relay;
+    std::unique_ptr<juce::WebComboBoxRelay> pedalSlot1Relay;
+    std::unique_ptr<juce::WebComboBoxRelay> pedalSlot2Relay;
+    std::unique_ptr<juce::WebComboBoxRelay> pedalSlot3Relay;
+    std::unique_ptr<juce::WebComboBoxRelay> pedalSlot4Relay;
+
     // Advanced/Expert Mode
     std::unique_ptr<juce::WebToggleButtonRelay> expertModeRelay;
     std::unique_ptr<juce::WebSliderRelay> micDistanceRelay;
@@ -137,6 +144,13 @@ private:
     // Global
     std::unique_ptr<juce::WebToggleButtonParameterAttachment> bypassAttachment;
     std::unique_ptr<juce::WebComboBoxParameterAttachment> presetAttachment;
+
+    // Pedal Slots
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> pedalSlot0Attachment;
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> pedalSlot1Attachment;
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> pedalSlot2Attachment;
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> pedalSlot3Attachment;
+    std::unique_ptr<juce::WebComboBoxParameterAttachment> pedalSlot4Attachment;
 
     // Advanced
     std::unique_ptr<juce::WebToggleButtonParameterAttachment> expertModeAttachment;
