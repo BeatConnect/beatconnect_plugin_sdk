@@ -1176,6 +1176,16 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             param->setValueNotifyingHost(value ? 1.0f : 0.0f);
     };
 
+    // Helper to set pedal order (array of 5 pedal indices: 0=distortion, 1=chorus, 2=tremolo, 3=delay, 4=reverb)
+    auto setPedalOrder = [this, &setParam](int slot0, int slot1, int slot2, int slot3, int slot4) {
+        // Pedal slots are choice parameters with 5 options, so normalize: index / 4.0
+        setParam(ParamIDs::pedalSlot0, slot0 / 4.0f);
+        setParam(ParamIDs::pedalSlot1, slot1 / 4.0f);
+        setParam(ParamIDs::pedalSlot2, slot2 / 4.0f);
+        setParam(ParamIDs::pedalSlot3, slot3 / 4.0f);
+        setParam(ParamIDs::pedalSlot4, slot4 / 4.0f);
+    };
+
     switch (presetIndex)
     {
         case 0: // Becca Signature Tone
@@ -1194,6 +1204,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.4f);
             setParam(ParamIDs::reverbMix, 0.25f);
+            // Default pedal order: distortion -> chorus -> tremolo -> delay -> reverb
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 1: // Pristine Clean
@@ -1210,6 +1222,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::tremoloEnabled, false);
             setBoolParam(ParamIDs::delayEnabled, false);
             setBoolParam(ParamIDs::reverbEnabled, false);
+            // Default pedal order
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 2: // Super Clean
@@ -1228,6 +1242,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.3f);
             setParam(ParamIDs::reverbMix, 0.15f);
+            // Default pedal order
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 3: // Overdriven / Fuzzy
@@ -1248,6 +1264,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.35f);
             setParam(ParamIDs::reverbMix, 0.2f);
+            // Fuzz first, then reverb at end
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 4: // 80s Dream
@@ -1270,6 +1288,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.6f);
             setParam(ParamIDs::reverbMix, 0.4f);
+            // 80s: chorus -> delay -> reverb chain for that lush sound
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 5: // Funk Groove
@@ -1288,6 +1308,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.25f);
             setParam(ParamIDs::reverbMix, 0.12f);
+            // Default pedal order
+            setPedalOrder(0, 1, 2, 3, 4);
             break;
 
         case 6: // Indie Grit
@@ -1312,6 +1334,8 @@ void BeccaToneAmpProcessor::applyPreset(int presetIndex)
             setBoolParam(ParamIDs::reverbEnabled, true);
             setParam(ParamIDs::reverbSize, 0.5f);
             setParam(ParamIDs::reverbMix, 0.3f);
+            // Indie: distortion -> tremolo -> chorus -> delay -> reverb
+            setPedalOrder(0, 2, 1, 3, 4);
             break;
 
         default:

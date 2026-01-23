@@ -10,7 +10,7 @@ import { Reorder, motion, AnimatePresence, useDragControls } from 'framer-motion
 import { useSliderParam, useToggleParam, useComboParam, useVisualizerData } from './hooks/useJuceParam';
 import { Knob } from './components/Knob';
 import { Pedal } from './components/Pedal';
-import { TubeGlow } from './components/TubeGlow';
+// TubeGlow removed for cleaner aesthetic
 import { PresetSelector } from './components/PresetSelector';
 import { Visualizer } from './components/Visualizer';
 import { CONTROL_TOOLTIPS } from './components/Tooltip';
@@ -65,11 +65,11 @@ interface PedalConfig {
 }
 
 const INITIAL_PEDAL_ORDER: PedalConfig[] = [
-  { id: 'distortion', name: 'FUZZ', color: '#4a3a2a', fontClass: 'font-fuzz' },
-  { id: 'chorus', name: 'CHORUS', color: '#3a4545', fontClass: 'font-chorus' },
-  { id: 'tremolo', name: 'TREMOLO', color: '#3a453a', fontClass: 'font-tremolo' },
-  { id: 'delay', name: 'DELAY', color: '#453a4a', fontClass: 'font-delay' },
-  { id: 'reverb', name: 'REVERB', color: '#3a4550', fontClass: 'font-reverb' },
+  { id: 'distortion', name: 'FUZZ', color: '#5C4A38', fontClass: 'font-fuzz' },      // Dark chocolate brown
+  { id: 'chorus', name: 'CHORUS', color: '#4A5848', fontClass: 'font-chorus' },      // Forest green-brown
+  { id: 'tremolo', name: 'TREMOLO', color: '#6B5840', fontClass: 'font-tremolo' },   // Caramel brown
+  { id: 'delay', name: 'DELAY', color: '#584850', fontClass: 'font-delay' },         // Plum brown
+  { id: 'reverb', name: 'REVERB', color: '#485058', fontClass: 'font-reverb' },      // Slate blue-brown
 ];
 
 // Default values for all parameters (used for double-click reset)
@@ -188,7 +188,6 @@ function AppContent() {
 
   // Spark effects
   const metalSparks = useSparks('metal', 12);
-  const orangeSparks = useSparks('orange', 10);
   const goldSparks = useSparks('gold', 8);
 
   // Amp parameters
@@ -366,32 +365,18 @@ function AppContent() {
               <LogoText text="Becca Tone Amp" disabled={isDragging} />
             </div>
 
-            {/* Controls mounted on the grill - tubes attached on left */}
+            {/* Controls - single row of knobs */}
             <div className="grill-controls">
-              {/* Tube Bay - Attached to left side, sticking out top */}
-              <div
-                className="tube-bay"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  orangeSparks.triggerSparks(e.clientX - rect.left, e.clientY - rect.top);
-                }}
-              >
-                {orangeSparks.SparkElements}
-                <TubeGlow level={vizData.inputLevel ?? 0} label="IN" />
-                <TubeGlow level={vizData.outputLevel ?? 0} label="OUT" />
-              </div>
-
               {/* Knob Row - All knobs in one centered row */}
               <div className="amp-knobs">
-                <Knob value={gain.value} onChange={gain.setValue} {...createDragCallbacks(gain.onDragStart, gain.onDragEnd)} label="Gain" defaultValue={DEFAULT_VALUES.gain} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.gain.title} tooltipDescription={CONTROL_TOOLTIPS.gain.description} />
-                <Knob value={bass.value} onChange={bass.setValue} {...createDragCallbacks(bass.onDragStart, bass.onDragEnd)} label="Bass" defaultValue={DEFAULT_VALUES.bass} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.bass.title} tooltipDescription={CONTROL_TOOLTIPS.bass.description} />
-                <Knob value={mid.value} onChange={mid.setValue} {...createDragCallbacks(mid.onDragStart, mid.onDragEnd)} label="Mid" defaultValue={DEFAULT_VALUES.mid} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.mid.title} tooltipDescription={CONTROL_TOOLTIPS.mid.description} />
-                <Knob value={treble.value} onChange={treble.setValue} {...createDragCallbacks(treble.onDragStart, treble.onDragEnd)} label="Treble" defaultValue={DEFAULT_VALUES.treble} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.treble.title} tooltipDescription={CONTROL_TOOLTIPS.treble.description} />
-                <Knob value={presence.value} onChange={presence.setValue} {...createDragCallbacks(presence.onDragStart, presence.onDragEnd)} label="Presence" defaultValue={DEFAULT_VALUES.presence} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.presence.title} tooltipDescription={CONTROL_TOOLTIPS.presence.description} />
-                <Knob value={compression.value} onChange={compression.setValue} {...createDragCallbacks(compression.onDragStart, compression.onDragEnd)} label="Comp" defaultValue={DEFAULT_VALUES.compression} color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.compression.title} tooltipDescription={CONTROL_TOOLTIPS.compression.description} />
-                <Knob value={level.value} onChange={level.setValue} {...createDragCallbacks(level.onDragStart, level.onDragEnd)} label="Level" defaultValue={DEFAULT_VALUES.level} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.level.title} tooltipDescription={CONTROL_TOOLTIPS.level.description} />
-                <Knob value={volume.value} onChange={volume.setValue} {...createDragCallbacks(volume.onDragStart, volume.onDragEnd)} label="Volume" defaultValue={DEFAULT_VALUES.volume} size="large" color="#8a7a6a" tooltipTitle={CONTROL_TOOLTIPS.volume.title} tooltipDescription={CONTROL_TOOLTIPS.volume.description} />
+                <Knob value={gain.value} onChange={gain.setValue} {...createDragCallbacks(gain.onDragStart, gain.onDragEnd)} label="Gain" defaultValue={DEFAULT_VALUES.gain} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.gain.title} tooltipDescription={CONTROL_TOOLTIPS.gain.description} />
+                <Knob value={bass.value} onChange={bass.setValue} {...createDragCallbacks(bass.onDragStart, bass.onDragEnd)} label="Bass" defaultValue={DEFAULT_VALUES.bass} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.bass.title} tooltipDescription={CONTROL_TOOLTIPS.bass.description} />
+                <Knob value={mid.value} onChange={mid.setValue} {...createDragCallbacks(mid.onDragStart, mid.onDragEnd)} label="Mid" defaultValue={DEFAULT_VALUES.mid} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.mid.title} tooltipDescription={CONTROL_TOOLTIPS.mid.description} />
+                <Knob value={treble.value} onChange={treble.setValue} {...createDragCallbacks(treble.onDragStart, treble.onDragEnd)} label="Treble" defaultValue={DEFAULT_VALUES.treble} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.treble.title} tooltipDescription={CONTROL_TOOLTIPS.treble.description} />
+                <Knob value={presence.value} onChange={presence.setValue} {...createDragCallbacks(presence.onDragStart, presence.onDragEnd)} label="Presence" defaultValue={DEFAULT_VALUES.presence} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.presence.title} tooltipDescription={CONTROL_TOOLTIPS.presence.description} />
+                <Knob value={compression.value} onChange={compression.setValue} {...createDragCallbacks(compression.onDragStart, compression.onDragEnd)} label="Comp" defaultValue={DEFAULT_VALUES.compression} color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.compression.title} tooltipDescription={CONTROL_TOOLTIPS.compression.description} />
+                <Knob value={level.value} onChange={level.setValue} {...createDragCallbacks(level.onDragStart, level.onDragEnd)} label="Level" defaultValue={DEFAULT_VALUES.level} size="large" color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.level.title} tooltipDescription={CONTROL_TOOLTIPS.level.description} />
+                <Knob value={volume.value} onChange={volume.setValue} {...createDragCallbacks(volume.onDragStart, volume.onDragEnd)} label="Volume" defaultValue={DEFAULT_VALUES.volume} size="large" color="#F5E8D8" tooltipTitle={CONTROL_TOOLTIPS.volume.title} tooltipDescription={CONTROL_TOOLTIPS.volume.description} />
               </div>
 
               {/* Power Switch */}

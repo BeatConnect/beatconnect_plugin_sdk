@@ -97,15 +97,15 @@ export function Visualizer({
       ctx.lineTo(width - padding.right, height - padding.bottom);
       ctx.closePath();
 
-      // Grayscale gradient fill for spectrum (darker at bottom where the fill is, lighter at top)
+      // Warm brown gradient fill for spectrum
       const specGradient = ctx.createLinearGradient(0, height - padding.bottom, 0, padding.top);
-      specGradient.addColorStop(0, 'rgba(100, 100, 100, 0.5)');  // Darker at bottom (base)
-      specGradient.addColorStop(0.5, 'rgba(140, 140, 140, 0.25)');
-      specGradient.addColorStop(1, 'rgba(180, 180, 180, 0.05)'); // Fade out at top
+      specGradient.addColorStop(0, 'rgba(139, 115, 85, 0.4)');  // Warm brown at bottom
+      specGradient.addColorStop(0.5, 'rgba(139, 115, 85, 0.2)');
+      specGradient.addColorStop(1, 'rgba(139, 115, 85, 0.05)'); // Fade out at top
       ctx.fillStyle = specGradient;
       ctx.fill();
 
-      // Draw spectrum line in grayscale
+      // Draw spectrum line in warm tone
       ctx.beginPath();
       for (let i = 0; i < numBins; i++) {
         const freq = (i / numBins) * 20000;
@@ -120,19 +120,19 @@ export function Visualizer({
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = 'rgba(160, 160, 160, 0.5)';
+      ctx.strokeStyle = 'rgba(139, 115, 85, 0.5)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else {
       // No spectrum data yet - show subtle placeholder
-      ctx.fillStyle = 'rgba(150, 150, 150, 0.1)';
+      ctx.fillStyle = 'rgba(107, 93, 77, 0.3)';
       ctx.font = '10px DM Sans';
       ctx.textAlign = 'center';
       ctx.fillText('Waiting for audio...', width / 2, height / 2);
     }
 
     // Background grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(139, 115, 85, 0.15)';
     ctx.lineWidth = 1;
 
     // Vertical lines (frequency markers)
@@ -146,7 +146,7 @@ export function Visualizer({
     });
 
     // Zero line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.strokeStyle = 'rgba(139, 115, 85, 0.25)';
     const zeroY = padding.top + graphHeight / 2;
     ctx.beginPath();
     ctx.moveTo(padding.left, zeroY);
@@ -193,27 +193,27 @@ export function Visualizer({
     ctx.closePath();
 
     const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
-    gradient.addColorStop(0, 'rgba(255, 200, 100, 0.25)');
-    gradient.addColorStop(0.5, 'rgba(255, 200, 100, 0.05)');
-    gradient.addColorStop(1, 'rgba(255, 200, 100, 0.25)');
+    gradient.addColorStop(0, 'rgba(45, 90, 74, 0.3)');
+    gradient.addColorStop(0.5, 'rgba(45, 90, 74, 0.08)');
+    gradient.addColorStop(1, 'rgba(45, 90, 74, 0.3)');
     ctx.fillStyle = gradient;
     ctx.fill();
 
     // Draw curve line with glow
-    ctx.shadowColor = 'rgba(255, 200, 100, 0.6)';
+    ctx.shadowColor = 'rgba(45, 90, 74, 0.5)';
     ctx.shadowBlur = 8;
     ctx.beginPath();
     points.forEach((p, i) => {
       if (i === 0) ctx.moveTo(p.x, p.y);
       else ctx.lineTo(p.x, p.y);
     });
-    ctx.strokeStyle = '#ffd080';
+    ctx.strokeStyle = '#2D5A4A';
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.shadowBlur = 0;
 
     // Draw frequency labels
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fillStyle = 'rgba(107, 93, 77, 0.7)';
     ctx.font = '9px DM Sans';
     ctx.textAlign = 'center';
     [100, 1000, 10000].forEach((freq) => {

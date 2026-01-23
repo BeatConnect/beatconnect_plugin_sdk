@@ -76,16 +76,33 @@ export function usePedalOrder(): PedalOrderReturn {
       const initialOrder = readOrderFromCpp();
       setOrderState(initialOrder);
 
+      // Debounce timer for batching rapid changes (e.g., preset loads)
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
       // Listen for changes from C++ (preset loads, etc.)
       const listeners = slotStatesRef.current.map((state) => {
         return state.valueChangedEvent.addListener(() => {
-          // Re-read entire order when any slot changes
-          const newOrder = readOrderFromCpp();
-          setOrderState(newOrder);
+          // Debounce: wait for all slots to settle before reading
+          // This prevents reading intermediate states during preset loads
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+          debounceTimer = setTimeout(() => {
+            const newOrder = readOrderFromCpp();
+            // Validate: ensure no duplicates (sanity check)
+            const uniqueOrder = [...new Set(newOrder)];
+            if (uniqueOrder.length === 5) {
+              setOrderState(newOrder);
+            }
+            debounceTimer = null;
+          }, 50); // 50ms debounce - enough for all 5 slots to update
         });
       });
 
       return () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
         listeners.forEach((listenerId, i) => {
           slotStatesRef.current[i].valueChangedEvent.removeListener(listenerId);
         });

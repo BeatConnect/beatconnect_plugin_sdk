@@ -41,7 +41,7 @@ export function Knob({
   const startValue = useRef(0);
 
   const sizeMap = {
-    tiny: 28,
+    tiny: 24,
     small: 44,
     medium: 56,
     large: 68,
@@ -123,14 +123,19 @@ export function Knob({
         style={{
           width: knobSize,
           height: knobSize,
-          transform: `rotate(${rotation}deg)`,
           '--knob-color': color,
         } as React.CSSProperties}
         onPointerDownCapture={handlePointerDown}
         onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
       >
-        <div className="knob-indicator" />
+        {/* Rotating pointer element - only this rotates, not the body */}
+        <div
+          className="knob-pointer"
+          style={{ transform: `rotate(${rotation}deg)` }}
+        >
+          <div className="knob-indicator" />
+        </div>
       </div>
       <div className={`knob-label ${showValue ? 'knob-label-value' : ''}`}>{displayText}</div>
     </div>

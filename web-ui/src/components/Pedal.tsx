@@ -64,7 +64,7 @@ export function Pedal({ name, color, enabled, onToggle, knobs, fontClass = '', t
               max={knob.max}
               defaultValue={knob.defaultValue}
               size="tiny"
-              color="#1a1a1a"
+              color="#F5E8D8"
               tooltipTitle={knob.tooltipTitle}
               tooltipDescription={knob.tooltipDescription}
             />
