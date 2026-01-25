@@ -18,6 +18,8 @@ import { LogoText } from './components/LogoText';
 import { DragProvider, useDragContext } from './contexts/DragContext';
 import { usePedalOrder, reorderPedalConfigs, pedalConfigsToIds, PedalId } from './hooks/usePedalOrder';
 import { useSparks } from './components/Sparks';
+import { useActivation } from './hooks/useActivation';
+import { ActivationDialog } from './components/ActivationDialog';
 
 // ==============================================================================
 // Parameter IDs (must match C++ ParameterIDs.h)
@@ -484,9 +486,12 @@ function AppContent() {
 }
 
 function App() {
+  const { showDialog } = useActivation();
+
   return (
     <DragProvider>
       <AppContent />
+      {showDialog && <ActivationDialog />}
     </DragProvider>
   );
 }

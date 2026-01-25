@@ -1,0 +1,252 @@
+/* ==============================================================================
+   Activation Dialog Styles (React)
+
+   Add these styles to your index.css or import directly.
+   Customize colors to match your plugin's theme.
+   ============================================================================== */
+
+.activation-overlay {
+  position: fixed;
+  inset: 0;
+  background: #09090b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.activation-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px;
+  max-width: 400px;
+  width: 100%;
+}
+
+.activation-container.shake {
+  animation: activation-shake 0.5s ease-in-out;
+}
+
+@keyframes activation-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+/* Lock Icon */
+.activation-lock-container {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.activation-lock-icon {
+  width: 64px;
+  height: 64px;
+  color: #52525b;
+  transition: all 0.5s ease;
+}
+
+.activation-lock-icon.unlocked {
+  color: #22c55e;
+  filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.4));
+}
+
+.activation-lock-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Header */
+.activation-header {
+  text-align: center;
+}
+
+.activation-header h1 {
+  color: #fafafa;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  letter-spacing: -0.025em;
+}
+
+.activation-subtitle {
+  color: #71717a;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Form */
+.activation-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.activation-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activation-input-group label {
+  color: #fafafa;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.activation-input-group input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.5px;
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  color: #fafafa;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.activation-input-group input:focus {
+  border-color: #3f3f46;
+  box-shadow: 0 0 0 2px rgba(63, 63, 70, 0.3);
+}
+
+.activation-input-group input.error {
+  border-color: #ef4444;
+}
+
+.activation-input-group input::placeholder {
+  color: #52525b;
+}
+
+.activation-input-group input:disabled {
+  opacity: 0.5;
+}
+
+.activation-error-text {
+  color: #ef4444;
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Buttons */
+.activation-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.activation-btn-primary {
+  background: #fafafa;
+  color: #09090b;
+}
+
+.activation-btn-primary:hover:not(:disabled) {
+  background: #e4e4e7;
+}
+
+.activation-btn-primary:disabled {
+  background: #27272a;
+  color: #71717a;
+  cursor: not-allowed;
+}
+
+.activation-btn-ghost {
+  background: transparent;
+  border: 1px solid #27272a;
+  color: #a1a1aa;
+}
+
+.activation-btn-ghost:hover:not(:disabled) {
+  border-color: #3f3f46;
+  color: #fafafa;
+}
+
+.activation-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.activation-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: activation-spin 0.6s linear infinite;
+}
+
+@keyframes activation-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Activated State */
+.activation-activated-state {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.activation-license-info {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.activation-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.activation-info-row:not(:last-child) {
+  border-bottom: 1px solid #27272a;
+}
+
+.activation-info-row .activation-label {
+  color: #71717a;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.activation-info-row .activation-value {
+  color: #fafafa;
+  font-size: 13px;
+}
+
+.activation-info-row .activation-value.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #22c55e;
+}
+
+.activation-hint {
+  color: #52525b;
+  font-size: 12px;
+  text-align: center;
+  margin: 0;
+}

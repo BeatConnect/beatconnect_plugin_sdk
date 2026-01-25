@@ -8,8 +8,8 @@ export default defineConfig({
   base: './',
 
   build: {
-    // Output to dist/ (CMake copies this to Resources/WebUI)
-    outDir: 'dist',
+    // Output directly to Resources/WebUI (CMake copies this to plugin bundle)
+    outDir: '../Resources/WebUI',
 
     // Clean output directory before build
     emptyOutDir: true,

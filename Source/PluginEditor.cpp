@@ -11,6 +11,10 @@
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
 
+#if BEATCONNECT_ACTIVATION_ENABLED
+#include <beatconnect/Activation.h>
+#endif
+
 static constexpr const char* DEV_SERVER_URL = "http://localhost:5173";
 
 //==============================================================================
@@ -211,6 +215,16 @@ void BeccaToneAmpEditor::setupWebView()
         .withOptionsFrom(*eq2kHzRelay)
         .withOptionsFrom(*eq4kHzRelay)
         .withOptionsFrom(*eq8kHzRelay)
+        // Activation event listeners
+        .withEventListener("activateLicense", [this](const juce::var& data) {
+            handleActivateLicense(data);
+        })
+        .withEventListener("deactivateLicense", [this](const juce::var& data) {
+            handleDeactivateLicense(data);
+        })
+        .withEventListener("getActivationStatus", [this](const juce::var&) {
+            handleGetActivationStatus();
+        })
         .withWinWebView2Options(
             juce::WebBrowserComponent::Options::WinWebView2()
                 .withBackgroundColour(juce::Colour(0xff1a1a1a))
@@ -398,4 +412,147 @@ void BeccaToneAmpEditor::resized()
 {
     if (webView)
         webView->setBounds(getLocalBounds());
+}
+
+//==============================================================================
+// Activation Handlers
+//==============================================================================
+
+void BeccaToneAmpEditor::sendActivationState()
+{
+    if (!webView)
+        return;
+
+    juce::DynamicObject::Ptr data = new juce::DynamicObject();
+
+#if BEATCONNECT_ACTIVATION_ENABLED
+    auto& activation = beatconnect::Activation::getInstance();
+
+    // isConfigured = true when BEATCONNECT_ACTIVATION_ENABLED=1 and SDK was configured
+    bool isConfigured = true;
+    bool isActivated = activation.isActivated();
+
+    data->setProperty("isConfigured", isConfigured);
+    data->setProperty("isActivated", isActivated);
+
+    if (isActivated)
+    {
+        if (auto info = activation.getActivationInfo())
+        {
+            juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
+            infoObj->setProperty("activationCode", juce::String(info->activationCode));
+            infoObj->setProperty("machineId", juce::String(info->machineId));
+            infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
+            infoObj->setProperty("currentActivations", info->currentActivations);
+            infoObj->setProperty("maxActivations", info->maxActivations);
+            infoObj->setProperty("isValid", info->isValid);
+            data->setProperty("info", juce::var(infoObj.get()));
+        }
+    }
+#else
+    // Activation not enabled - report as not configured (no dialog shown)
+    data->setProperty("isConfigured", false);
+    data->setProperty("isActivated", true);  // Allow full access when activation disabled
+#endif
+
+    webView->emitEventIfBrowserIsVisible("activationState", juce::var(data.get()));
+}
+
+void BeccaToneAmpEditor::handleActivateLicense(const juce::var& data)
+{
+#if BEATCONNECT_ACTIVATION_ENABLED
+    juce::String code = data.getProperty("code", "").toString();
+    if (code.isEmpty())
+        return;
+
+    // Use weak reference for async callback safety
+    juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
+
+    auto& activation = beatconnect::Activation::getInstance();
+
+    // Perform activation asynchronously
+    activation.activateAsync(code.toStdString(),
+        [safeThis](beatconnect::ActivationStatus status) {
+            juce::MessageManager::callAsync([safeThis, status]() {
+                if (!safeThis)
+                    return;
+
+                juce::DynamicObject::Ptr result = new juce::DynamicObject();
+
+                juce::String statusStr;
+                switch (status)
+                {
+                    case beatconnect::ActivationStatus::Valid:         statusStr = "valid"; break;
+                    case beatconnect::ActivationStatus::Invalid:       statusStr = "invalid"; break;
+                    case beatconnect::ActivationStatus::Revoked:       statusStr = "revoked"; break;
+                    case beatconnect::ActivationStatus::MaxReached:    statusStr = "max_reached"; break;
+                    case beatconnect::ActivationStatus::NetworkError:  statusStr = "network_error"; break;
+                    case beatconnect::ActivationStatus::ServerError:   statusStr = "server_error"; break;
+                    case beatconnect::ActivationStatus::NotConfigured: statusStr = "not_configured"; break;
+                    case beatconnect::ActivationStatus::AlreadyActive: statusStr = "already_active"; break;
+                    case beatconnect::ActivationStatus::NotActivated:  statusStr = "not_activated"; break;
+                    default: statusStr = "unknown"; break;
+                }
+                result->setProperty("status", statusStr);
+
+                // If successful, include activation info
+                if (status == beatconnect::ActivationStatus::Valid ||
+                    status == beatconnect::ActivationStatus::AlreadyActive)
+                {
+                    auto& activation = beatconnect::Activation::getInstance();
+                    if (auto info = activation.getActivationInfo())
+                    {
+                        juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
+                        infoObj->setProperty("activationCode", juce::String(info->activationCode));
+                        infoObj->setProperty("machineId", juce::String(info->machineId));
+                        infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
+                        infoObj->setProperty("currentActivations", info->currentActivations);
+                        infoObj->setProperty("maxActivations", info->maxActivations);
+                        infoObj->setProperty("isValid", info->isValid);
+                        result->setProperty("info", juce::var(infoObj.get()));
+                    }
+                }
+
+                safeThis->webView->emitEventIfBrowserIsVisible("activationResult", juce::var(result.get()));
+            });
+        });
+#else
+    juce::ignoreUnused(data);
+#endif
+}
+
+void BeccaToneAmpEditor::handleDeactivateLicense([[maybe_unused]] const juce::var& data)
+{
+#if BEATCONNECT_ACTIVATION_ENABLED
+    juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
+
+    // Perform deactivation in background thread
+    std::thread([safeThis]() {
+        auto status = beatconnect::Activation::getInstance().deactivate();
+
+        juce::MessageManager::callAsync([safeThis, status]() {
+            if (!safeThis)
+                return;
+
+            juce::DynamicObject::Ptr result = new juce::DynamicObject();
+            juce::String statusStr;
+            switch (status)
+            {
+                case beatconnect::ActivationStatus::Valid:         statusStr = "valid"; break;
+                case beatconnect::ActivationStatus::NetworkError:  statusStr = "network_error"; break;
+                case beatconnect::ActivationStatus::ServerError:   statusStr = "server_error"; break;
+                case beatconnect::ActivationStatus::NotActivated:  statusStr = "not_activated"; break;
+                default: statusStr = "unknown"; break;
+            }
+            result->setProperty("status", statusStr);
+
+            safeThis->webView->emitEventIfBrowserIsVisible("deactivationResult", juce::var(result.get()));
+        });
+    }).detach();
+#endif
+}
+
+void BeccaToneAmpEditor::handleGetActivationStatus()
+{
+    sendActivationState();
 }

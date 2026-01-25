@@ -173,5 +173,12 @@ private:
     void sendVisualizerData();
 
     //==============================================================================
+    // Activation handlers
+    void sendActivationState();
+    void handleActivateLicense(const juce::var& data);
+    void handleDeactivateLicense(const juce::var& data);
+    void handleGetActivationStatus();
+
+    //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BeccaToneAmpEditor)
 };
