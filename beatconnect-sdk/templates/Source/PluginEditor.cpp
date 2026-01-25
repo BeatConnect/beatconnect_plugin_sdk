@@ -12,7 +12,7 @@
 #include "ParameterIDs.h"
 
 #if BEATCONNECT_ACTIVATION_ENABLED
-#include <beatconnect/Activation.h>
+#include <thread>
 #endif
 
 // Development server URL - Vite default port
@@ -26,7 +26,6 @@ static constexpr const char* DEV_SERVER_URL = "http://localhost:5173";
 {
     setupWebView();
     setupRelaysAndAttachments();
-    setupActivationEvents();
 
     // Set plugin window size
     setSize(800, 500);
@@ -116,6 +115,18 @@ void {{PLUGIN_NAME}}Editor::setupWebView()
         .withOptionsFrom(*mixRelay)
         .withOptionsFrom(*bypassRelay)
         // .withOptionsFrom(*modeRelay)  // Uncomment if using
+        // Activation event listeners
+#if BEATCONNECT_ACTIVATION_ENABLED
+        .withEventListener("activateLicense", [this](const juce::var& data) {
+            handleActivateLicense(data);
+        })
+        .withEventListener("deactivateLicense", [this](const juce::var& data) {
+            handleDeactivateLicense(data);
+        })
+        .withEventListener("getActivationStatus", [this](const juce::var&) {
+            handleGetActivationStatus();
+        })
+#endif
         // Windows-specific WebView2 options
         .withWinWebView2Options(
             juce::WebBrowserComponent::Options::WinWebView2()
@@ -174,7 +185,6 @@ void {{PLUGIN_NAME}}Editor::setupRelaysAndAttachments()
 void {{PLUGIN_NAME}}Editor::timerCallback()
 {
     sendVisualizerData();
-    sendActivationState();
 }
 
 void {{PLUGIN_NAME}}Editor::sendVisualizerData()
@@ -206,85 +216,116 @@ void {{PLUGIN_NAME}}Editor::sendVisualizerData()
 // BeatConnect Activation
 //==============================================================================
 
-void {{PLUGIN_NAME}}Editor::setupActivationEvents()
-{
-#if BEATCONNECT_ACTIVATION_ENABLED
-    if (!webView)
-        return;
-
-    // Listen for activation requests from web UI
-    webView->addListener("activatePlugin", [this](const juce::var& data) {
-        auto code = data.getProperty("code", "").toString().toStdString();
-
-        beatconnect::Activation::getInstance().activateAsync(code,
-            [safeThis = juce::Component::SafePointer(this)](beatconnect::ActivationStatus status) {
-                if (safeThis == nullptr)
-                    return;
-
-                juce::MessageManager::callAsync([safeThis, status]() {
-                    if (safeThis == nullptr)
-                        return;
-
-                    juce::DynamicObject::Ptr result = new juce::DynamicObject();
-                    result->setProperty("success", status == beatconnect::ActivationStatus::Valid ||
-                                                   status == beatconnect::ActivationStatus::AlreadyActive);
-
-                    juce::String statusStr;
-                    switch (status) {
-                        case beatconnect::ActivationStatus::Valid:         statusStr = "valid"; break;
-                        case beatconnect::ActivationStatus::Invalid:       statusStr = "invalid"; break;
-                        case beatconnect::ActivationStatus::Revoked:       statusStr = "revoked"; break;
-                        case beatconnect::ActivationStatus::MaxReached:    statusStr = "max_reached"; break;
-                        case beatconnect::ActivationStatus::NetworkError:  statusStr = "network_error"; break;
-                        case beatconnect::ActivationStatus::ServerError:   statusStr = "server_error"; break;
-                        case beatconnect::ActivationStatus::NotConfigured: statusStr = "not_configured"; break;
-                        case beatconnect::ActivationStatus::AlreadyActive: statusStr = "already_active"; break;
-                        case beatconnect::ActivationStatus::NotActivated:  statusStr = "not_activated"; break;
-                    }
-                    result->setProperty("status", statusStr);
-
-                    safeThis->webView->emitEventIfBrowserIsVisible("activationResult", juce::var(result.get()));
-                });
-            });
-    });
-
-    // Listen for deactivation requests
-    webView->addListener("deactivatePlugin", [this](const juce::var&) {
-        auto status = beatconnect::Activation::getInstance().deactivate();
-
-        juce::DynamicObject::Ptr result = new juce::DynamicObject();
-        result->setProperty("success", status == beatconnect::ActivationStatus::Valid);
-        webView->emitEventIfBrowserIsVisible("deactivationResult", juce::var(result.get()));
-    });
-#endif
-}
-
 void {{PLUGIN_NAME}}Editor::sendActivationState()
 {
     if (!webView)
         return;
 
 #if BEATCONNECT_ACTIVATION_ENABLED
-    auto& activation = beatconnect::Activation::getInstance();
+    // Use processor's activation instance (NOT singleton!)
+    auto& activation = processorRef.getActivation();
 
     juce::DynamicObject::Ptr data = new juce::DynamicObject();
+    data->setProperty("isConfigured", activation.isConfigured());
     data->setProperty("isActivated", activation.isActivated());
-    data->setProperty("requiresActivation", processorRef.hasActivationEnabled());
 
-    if (auto info = activation.getActivationInfo())
+    if (activation.isActivated())
     {
-        data->setProperty("activationCode", juce::String(info->activationCode));
-        data->setProperty("expiresAt", juce::String(info->expiresAt));
+        if (auto info = activation.getActivationInfo())
+        {
+            juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
+            infoObj->setProperty("activationCode", juce::String(info->activationCode));
+            infoObj->setProperty("machineId", juce::String(info->machineId));
+            infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
+            infoObj->setProperty("currentActivations", info->currentActivations);
+            infoObj->setProperty("maxActivations", info->maxActivations);
+            infoObj->setProperty("isValid", info->isValid);
+            data->setProperty("info", juce::var(infoObj.get()));
+        }
     }
 
     webView->emitEventIfBrowserIsVisible("activationState", juce::var(data.get()));
 #else
     // No activation compiled in - always report as activated
     juce::DynamicObject::Ptr data = new juce::DynamicObject();
+    data->setProperty("isConfigured", false);
     data->setProperty("isActivated", true);
-    data->setProperty("requiresActivation", false);
     webView->emitEventIfBrowserIsVisible("activationState", juce::var(data.get()));
 #endif
+}
+
+void {{PLUGIN_NAME}}Editor::handleActivateLicense([[maybe_unused]] const juce::var& data)
+{
+#if BEATCONNECT_ACTIVATION_ENABLED
+    juce::String code = data.getProperty("code", "").toString();
+    if (code.isEmpty())
+        return;
+
+    juce::Component::SafePointer<{{PLUGIN_NAME}}Editor> safeThis(this);
+
+    // Use processor's activation instance (NOT singleton!)
+    auto& activation = processorRef.getActivation();
+
+    activation.activateAsync(code.toStdString(),
+        [safeThis](beatconnect::ActivationStatus status) {
+            juce::MessageManager::callAsync([safeThis, status]() {
+                if (!safeThis || !safeThis->webView)
+                    return;
+
+                juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                result->setProperty("status", juce::String(beatconnect::activationStatusToString(status)));
+
+                if (status == beatconnect::ActivationStatus::Valid ||
+                    status == beatconnect::ActivationStatus::AlreadyActive)
+                {
+                    auto& activation = safeThis->processorRef.getActivation();
+                    if (auto info = activation.getActivationInfo())
+                    {
+                        juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
+                        infoObj->setProperty("activationCode", juce::String(info->activationCode));
+                        infoObj->setProperty("machineId", juce::String(info->machineId));
+                        infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
+                        infoObj->setProperty("currentActivations", info->currentActivations);
+                        infoObj->setProperty("maxActivations", info->maxActivations);
+                        infoObj->setProperty("isValid", info->isValid);
+                        result->setProperty("info", juce::var(infoObj.get()));
+                    }
+                }
+
+                safeThis->webView->emitEventIfBrowserIsVisible("activationResult", juce::var(result.get()));
+            });
+        });
+#endif
+}
+
+void {{PLUGIN_NAME}}Editor::handleDeactivateLicense([[maybe_unused]] const juce::var&)
+{
+#if BEATCONNECT_ACTIVATION_ENABLED
+    juce::Component::SafePointer<{{PLUGIN_NAME}}Editor> safeThis(this);
+
+    // Run deactivation in background thread
+    std::thread([safeThis]() {
+        if (!safeThis)
+            return;
+
+        // Use processor's activation instance (NOT singleton!)
+        auto status = safeThis->processorRef.getActivation().deactivate();
+
+        juce::MessageManager::callAsync([safeThis, status]() {
+            if (!safeThis || !safeThis->webView)
+                return;
+
+            juce::DynamicObject::Ptr result = new juce::DynamicObject();
+            result->setProperty("status", juce::String(beatconnect::activationStatusToString(status)));
+            safeThis->webView->emitEventIfBrowserIsVisible("deactivationResult", juce::var(result.get()));
+        });
+    }).detach();
+#endif
+}
+
+void {{PLUGIN_NAME}}Editor::handleGetActivationStatus()
+{
+    sendActivationState();
 }
 
 //==============================================================================

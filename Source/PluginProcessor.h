@@ -13,6 +13,10 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
+#if BEATCONNECT_ACTIVATION_ENABLED
+#include <beatconnect/Activation.h>
+#endif
+
 //==============================================================================
 class BeccaToneAmpProcessor : public juce::AudioProcessor
 {
@@ -59,9 +63,16 @@ public:
 
     //==============================================================================
     // BeatConnect Integration
-    const juce::String& getPluginId() const { return pluginId_; }
-    const juce::String& getApiBaseUrl() const { return apiBaseUrl_; }
+    juce::String getPluginId() const { return pluginId_; }
+    juce::String getApiBaseUrl() const { return apiBaseUrl_; }
+    juce::String getSupabaseKey() const { return supabasePublishableKey_; }
     bool hasActivationEnabled() const;
+
+#if BEATCONNECT_ACTIVATION_ENABLED
+    // Each processor owns its own Activation instance (no static/singleton!)
+    beatconnect::Activation& getActivation() { return activation_; }
+    const beatconnect::Activation& getActivation() const { return activation_; }
+#endif
 
     //==============================================================================
     // Level metering for UI
@@ -218,6 +229,11 @@ private:
     // Preset handling
     void applyPreset(int presetIndex);
     int lastAppliedPreset = -1;
+
+#if BEATCONNECT_ACTIVATION_ENABLED
+    // Instance-based activation - avoids static member issues with multiple plugins
+    beatconnect::Activation activation_;
+#endif
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BeccaToneAmpProcessor)

@@ -7,13 +7,17 @@
  * distributed through the BeatConnect platform.
  *
  * Usage:
- *   beatconnect::Activation::Config config;
+ *   // In PluginProcessor.h - own an Activation instance
+ *   beatconnect::Activation activation;
+ *
+ *   // In PluginProcessor.cpp - configure during construction
+ *   beatconnect::ActivationConfig config;
  *   config.apiBaseUrl = "https://xxx.supabase.co";
  *   config.pluginId = "your-project-uuid";
- *
- *   auto& activation = beatconnect::Activation::getInstance();
  *   activation.configure(config);
  *
+ *   // In PluginEditor - get reference from processor
+ *   auto& activation = processorRef.getActivation();
  *   if (!activation.isActivated()) {
  *       // Show activation dialog
  *       auto status = activation.activate(userEnteredCode);
@@ -29,69 +33,6 @@
 #include <optional>
 
 namespace beatconnect {
-
-// ==============================================================================
-// Debug Logging Utility
-// ==============================================================================
-
-/**
- * Cross-platform debug logging for BeatConnect plugins.
- *
- * Logs are written to the user's app data folder:
- *   macOS:   ~/Library/Application Support/BeatConnect/<pluginName>/debug.log
- *   Windows: C:\Users\<user>\AppData\Roaming\BeatConnect\<pluginName>\debug.log
- *   Linux:   ~/.local/share/BeatConnect/<pluginName>/debug.log
- *
- * Usage:
- *   beatconnect::Debug::init("MyPlugin", true);  // Enable debug mode
- *   beatconnect::Debug::log("Starting activation...");
- *   beatconnect::Debug::log("Result: " + resultString);
- *   beatconnect::Debug::revealLogFile();  // Open folder containing log
- */
-class Debug {
-public:
-    /**
-     * Initialize debug logging for a plugin.
-     * @param pluginName Name used for the log folder (e.g., "MyPlugin")
-     * @param enabled Whether debug logging is enabled
-     */
-    static void init(const std::string& pluginName, bool enabled = false);
-
-    /**
-     * Check if debug logging is enabled.
-     */
-    static bool isEnabled();
-
-    /**
-     * Enable or disable debug logging at runtime.
-     */
-    static void setEnabled(bool enabled);
-
-    /**
-     * Log a debug message (only if enabled).
-     * Thread-safe.
-     */
-    static void log(const std::string& message);
-
-    /**
-     * Clear the debug log file.
-     */
-    static void clearLog();
-
-    /**
-     * Get the path to the debug log file.
-     */
-    static std::string getLogFilePath();
-
-    /**
-     * Open the folder containing the log file in the system file manager.
-     * Useful for helping users find logs for troubleshooting.
-     */
-    static void revealLogFile();
-
-private:
-    Debug() = delete;
-};
 
 // ==============================================================================
 // Activation Status
@@ -154,15 +95,23 @@ struct ActivationConfig {
 };
 
 // ==============================================================================
-// Activation Class (Singleton)
+// Activation Class
 // ==============================================================================
 
+/**
+ * Activation manager for a single plugin instance.
+ *
+ * Each PluginProcessor should own its own Activation instance.
+ * This avoids static state issues when multiple plugins are loaded.
+ */
 class Activation {
 public:
-    // Get singleton instance
-    static Activation& getInstance();
+    Activation();
+    ~Activation();
 
-    // Prevent copying
+    // Move-only (pImpl pattern)
+    Activation(Activation&&) noexcept;
+    Activation& operator=(Activation&&) noexcept;
     Activation(const Activation&) = delete;
     Activation& operator=(const Activation&) = delete;
 
@@ -171,7 +120,7 @@ public:
     // =========================================================================
 
     /**
-     * Configure the activation SDK. Must be called before any other methods.
+     * Configure the activation instance. Must be called before any other methods.
      * @param config Configuration options
      */
     void configure(const ActivationConfig& config);
@@ -292,10 +241,25 @@ public:
      */
     void setDebugCallback(DebugCallback callback);
 
-private:
-    Activation();
-    ~Activation();
+    /**
+     * Enable or disable debug mode.
+     * When enabled, logs are written to:
+     *   Windows: %APPDATA%/BeatConnect/<pluginId>/debug.log
+     *   macOS:   ~/Library/Application Support/BeatConnect/<pluginId>/debug.log
+     */
+    void setDebugEnabled(bool enabled);
 
+    /**
+     * Check if debug mode is enabled.
+     */
+    bool isDebugEnabled() const;
+
+    /**
+     * Get path to the debug log file.
+     */
+    std::string getDebugLogPath() const;
+
+private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };

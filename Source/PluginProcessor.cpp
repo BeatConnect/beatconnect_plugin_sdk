@@ -1351,11 +1351,18 @@ juce::AudioProcessorEditor* BeccaToneAmpProcessor::createEditor()
     return new BeccaToneAmpEditor(*this);
 }
 
+// State version - increment when making breaking parameter changes
+static constexpr int kStateVersion = 1;
+
 //==============================================================================
 void BeccaToneAmpProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
+
+    // Add state version for forwards compatibility
+    xml->setAttribute("stateVersion", kStateVersion);
+
     copyXmlToBinary(*xml, destData);
 }
 
@@ -1364,7 +1371,20 @@ void BeccaToneAmpProcessor::setStateInformation(const void* data, int sizeInByte
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
 
     if (xmlState != nullptr && xmlState->hasTagName(apvts.state.getType()))
+    {
+        // Check state version
+        int loadedVersion = xmlState->getIntAttribute("stateVersion", 0);
+
         apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+
+        // Reset to defaults if state version mismatch (breaking parameter changes)
+        if (loadedVersion != kStateVersion)
+        {
+            DBG("State version mismatch (loaded: " + juce::String(loadedVersion) +
+                ", current: " + juce::String(kStateVersion) + ") - using defaults");
+            // Add any parameter resets needed here
+        }
+    }
 }
 
 //==============================================================================
@@ -1405,7 +1425,7 @@ void BeccaToneAmpProcessor::loadProjectData()
         config.apiBaseUrl = apiBaseUrl_.toStdString();
         config.pluginId = pluginId_.toStdString();
         config.supabaseKey = supabasePublishableKey_.toStdString();
-        beatconnect::Activation::getInstance().configure(config);
+        activation_.configure(config);  // Use instance member, NOT singleton
     }
 #endif
 #endif

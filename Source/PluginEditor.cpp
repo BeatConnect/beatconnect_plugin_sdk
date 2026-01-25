@@ -426,7 +426,7 @@ void BeccaToneAmpEditor::sendActivationState()
     juce::DynamicObject::Ptr data = new juce::DynamicObject();
 
 #if BEATCONNECT_ACTIVATION_ENABLED
-    auto& activation = beatconnect::Activation::getInstance();
+    auto& activation = processorRef.getActivation();  // Use instance member, NOT singleton
 
     // isConfigured = true when BEATCONNECT_ACTIVATION_ENABLED=1 and SDK was configured
     bool isConfigured = true;
@@ -468,7 +468,7 @@ void BeccaToneAmpEditor::handleActivateLicense(const juce::var& data)
     // Use weak reference for async callback safety
     juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
 
-    auto& activation = beatconnect::Activation::getInstance();
+    auto& activation = processorRef.getActivation();  // Use instance member, NOT singleton
 
     // Perform activation asynchronously
     activation.activateAsync(code.toStdString(),
@@ -499,7 +499,7 @@ void BeccaToneAmpEditor::handleActivateLicense(const juce::var& data)
                 if (status == beatconnect::ActivationStatus::Valid ||
                     status == beatconnect::ActivationStatus::AlreadyActive)
                 {
-                    auto& activation = beatconnect::Activation::getInstance();
+                    auto& activation = safeThis->processorRef.getActivation();  // Use instance member, NOT singleton
                     if (auto info = activation.getActivationInfo())
                     {
                         juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
@@ -526,9 +526,10 @@ void BeccaToneAmpEditor::handleDeactivateLicense([[maybe_unused]] const juce::va
 #if BEATCONNECT_ACTIVATION_ENABLED
     juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
 
-    // Perform deactivation in background thread
-    std::thread([safeThis]() {
-        auto status = beatconnect::Activation::getInstance().deactivate();
+    // Perform deactivation in background thread - capture processor ref for thread safety
+    auto& activation = processorRef.getActivation();
+    std::thread([safeThis, &activation]() {
+        auto status = activation.deactivate();  // Use instance member, NOT singleton
 
         juce::MessageManager::callAsync([safeThis, status]() {
             if (!safeThis)
