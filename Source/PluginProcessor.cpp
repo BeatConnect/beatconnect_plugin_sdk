@@ -1425,7 +1425,8 @@ void BeccaToneAmpProcessor::loadProjectData()
         config.apiBaseUrl = apiBaseUrl_.toStdString();
         config.pluginId = pluginId_.toStdString();
         config.supabaseKey = supabasePublishableKey_.toStdString();
-        activation_.configure(config);  // Use instance member, NOT singleton
+        config.pluginName = "BeccaToneAmp";
+        activation_ = beatconnect::Activation::create(config);
     }
 #endif
 #endif

@@ -70,8 +70,9 @@ public:
 
 #if BEATCONNECT_ACTIVATION_ENABLED
     // Each processor owns its own Activation instance (no static/singleton!)
-    beatconnect::Activation& getActivation() { return activation_; }
-    const beatconnect::Activation& getActivation() const { return activation_; }
+    beatconnect::Activation* getActivation() { return activation_.get(); }
+    const beatconnect::Activation* getActivation() const { return activation_.get(); }
+    bool hasActivation() const { return activation_ != nullptr; }
 #endif
 
     //==============================================================================
@@ -232,7 +233,7 @@ private:
 
 #if BEATCONNECT_ACTIVATION_ENABLED
     // Instance-based activation - avoids static member issues with multiple plugins
-    beatconnect::Activation activation_;
+    std::unique_ptr<beatconnect::Activation> activation_;
 #endif
 
     //==============================================================================

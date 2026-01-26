@@ -3,13 +3,6 @@
  *
  * Uses JUCE for HTTP client and JSON parsing since plugins already have it.
  * Falls back to system APIs if JUCE is not available.
- *
- * IMPORTANT: This is an instance-based implementation. Each PluginProcessor
- * should own its own Activation instance to avoid conflicts when multiple
- * plugins are loaded in the same DAW process.
- *
- * DO NOT use static members or singletons - they cause issues when multiple
- * plugin instances share the same address space.
  */
 
 #include "beatconnect/Activation.h"
@@ -37,20 +30,29 @@ namespace beatconnect {
 
 const char* activationStatusToString(ActivationStatus status) {
     switch (status) {
-        case ActivationStatus::Valid:         return "valid";
-        case ActivationStatus::Invalid:       return "invalid";
-        case ActivationStatus::Revoked:       return "revoked";
-        case ActivationStatus::MaxReached:    return "max_reached";
-        case ActivationStatus::NetworkError:  return "network_error";
-        case ActivationStatus::ServerError:   return "server_error";
-        case ActivationStatus::NotConfigured: return "not_configured";
-        case ActivationStatus::AlreadyActive: return "already_active";
-        case ActivationStatus::NotActivated:  return "not_activated";
+        case ActivationStatus::Valid:         return "Valid";
+        case ActivationStatus::Invalid:       return "Invalid activation code";
+        case ActivationStatus::Revoked:       return "License has been revoked";
+        case ActivationStatus::MaxReached:    return "Maximum activations reached";
+        case ActivationStatus::NetworkError:  return "Network error - check connection";
+        case ActivationStatus::ServerError:   return "Server error - try again later";
+        case ActivationStatus::NotConfigured: return "SDK not configured";
+        case ActivationStatus::AlreadyActive: return "Already activated";
+        case ActivationStatus::NotActivated:  return "Not activated";
     }
-    return "unknown";
+    return "Unknown status";
 }
 
+// ==============================================================================
+// Debug Logging Implementation
+// ==============================================================================
+
 namespace {
+    std::mutex g_debugMutex;
+    std::string g_pluginName;
+    bool g_debugEnabled = false;
+    std::string g_logFilePath;
+
     std::string getTimestamp() {
 #if BEATCONNECT_USE_JUCE
         return juce::Time::getCurrentTime().toString(false, true, true, true).toStdString();
@@ -64,6 +66,77 @@ namespace {
     }
 }
 
+void Debug::init(const std::string& pluginName, bool enabled) {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    g_pluginName = pluginName;
+    g_debugEnabled = enabled;
+
+#if BEATCONNECT_USE_JUCE
+    // Build log file path: AppData/BeatConnect/<pluginName>/debug.log
+    auto appData = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+    auto logDir = appData.getChildFile("BeatConnect").getChildFile(juce::String(pluginName));
+    logDir.createDirectory();
+    g_logFilePath = logDir.getChildFile("debug.log").getFullPathName().toStdString();
+#else
+    g_logFilePath = pluginName + "_debug.log";
+#endif
+
+    if (enabled) {
+        // Clear log on init when enabled
+        std::ofstream ofs(g_logFilePath, std::ios::trunc);
+        ofs << "[" << getTimestamp() << "] === Debug logging initialized for " << pluginName << " ===" << std::endl;
+    }
+}
+
+bool Debug::isEnabled() {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    return g_debugEnabled;
+}
+
+void Debug::setEnabled(bool enabled) {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    g_debugEnabled = enabled;
+}
+
+void Debug::log(const std::string& message) {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    if (!g_debugEnabled || g_logFilePath.empty()) return;
+
+    std::ofstream ofs(g_logFilePath, std::ios::app);
+    if (ofs.is_open()) {
+        ofs << "[" << getTimestamp() << "] " << message << std::endl;
+    }
+
+#if BEATCONNECT_USE_JUCE
+    DBG(juce::String("[BeatConnect] " + message));
+#endif
+}
+
+void Debug::clearLog() {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    if (g_logFilePath.empty()) return;
+
+#if BEATCONNECT_USE_JUCE
+    juce::File(g_logFilePath).deleteFile();
+#else
+    std::ofstream ofs(g_logFilePath, std::ios::trunc);
+#endif
+}
+
+std::string Debug::getLogFilePath() {
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    return g_logFilePath;
+}
+
+void Debug::revealLogFile() {
+#if BEATCONNECT_USE_JUCE
+    std::lock_guard<std::mutex> lock(g_debugMutex);
+    if (!g_logFilePath.empty()) {
+        juce::File(g_logFilePath).revealToUser();
+    }
+#endif
+}
+
 // ==============================================================================
 // Implementation Class
 // ==============================================================================
@@ -73,88 +146,139 @@ public:
     Impl() = default;
     ~Impl() = default;
 
-    // Debug logging - instance-based, no static state
-    void setDebugEnabled(bool enabled) {
-        std::lock_guard<std::mutex> lock(mutex);
-        debugEnabled = enabled;
-
-        if (enabled && !debugLogPath.empty()) {
-            // Clear log on enable
-            std::ofstream ofs(debugLogPath, std::ios::trunc);
-            ofs << "[" << getTimestamp() << "] === Debug logging enabled ===" << std::endl;
-        }
-    }
-
-    bool isDebugEnabled() const {
-        std::lock_guard<std::mutex> lock(mutex);
-        return debugEnabled;
-    }
-
-    std::string getDebugLogPath() const {
-        std::lock_guard<std::mutex> lock(mutex);
-        return debugLogPath;
-    }
-
     void setDebugCallback(Activation::DebugCallback callback) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::lock_guard<std::mutex> lock(debugMutex);
         debugCallback = callback;
     }
 
+    // Instance-based debug logging (no global state)
     void debug(const std::string& msg) {
-        std::lock_guard<std::mutex> lock(mutex);
+        // Log to instance's own log file if enabled
+        debugLog("[ActivationSDK] " + msg);
 
-        if (!debugEnabled) return;
-
-        // Write to log file
-        if (!debugLogPath.empty()) {
-            std::ofstream ofs(debugLogPath, std::ios::app);
-            if (ofs.is_open()) {
-                ofs << "[" << getTimestamp() << "] " << msg << std::endl;
-            }
+        // Also call the callback if set
+        Activation::DebugCallback cb;
+        {
+            std::lock_guard<std::mutex> lock(debugMutex);
+            cb = debugCallback;
         }
-
-#if BEATCONNECT_USE_JUCE
-        DBG(juce::String("[BeatConnect] " + msg));
-#endif
-
-        // Call callback if set
-        if (debugCallback) {
-            debugCallback("[BeatConnect] " + msg);
+        if (cb) {
+            cb("[ActivationSDK] " + msg);
         }
     }
 
-    void configure(const ActivationConfig& cfg) {
-        this->config = cfg;
+    void debugLog(const std::string& msg) {
+        std::lock_guard<std::mutex> lock(debugMutex);
+        if (!debugEnabled || debugLogPath.empty()) return;
+
+#if BEATCONNECT_USE_JUCE
+        std::string timestamp = juce::Time::getCurrentTime()
+            .toString(false, true, true, true).toStdString();
+
+        juce::File logFile(debugLogPath);
+        logFile.appendText("[" + timestamp + "] " + msg + "\n");
+        DBG(juce::String("[BeatConnect] " + msg));
+#else
+        std::ofstream ofs(debugLogPath, std::ios::app);
+        if (ofs.is_open()) {
+            ofs << msg << std::endl;
+        }
+#endif
+    }
+
+    std::string getDebugLogPath() const {
+        std::lock_guard<std::mutex> lock(debugMutex);
+        return debugLogPath;
+    }
+
+    void revealDebugLog() {
+#if BEATCONNECT_USE_JUCE
+        std::lock_guard<std::mutex> lock(debugMutex);
+        if (!debugLogPath.empty()) {
+            juce::File(debugLogPath).revealToUser();
+        }
+#endif
+    }
+
+    bool isDebugEnabled() const {
+        std::lock_guard<std::mutex> lock(debugMutex);
+        return debugEnabled;
+    }
+
+    // Simple init-time logging (before debug is fully configured)
+    void initLog(const std::string& msg) {
+#if BEATCONNECT_USE_JUCE
+        auto logFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("BeatConnect")
+            .getChildFile("init.log");
+        logFile.getParentDirectory().createDirectory();
+        logFile.appendText(msg + "\n");
+        DBG(juce::String(msg));
+#endif
+    }
+
+    void configure(const ActivationConfig& config) {
+        // No mutex needed - this runs on main thread during plugin init
+        initLog("[Activation] configure() called");
+
+        this->config = config;
         configured = true;
+        initLog("[Activation] config set, configured=true");
+
+        // Setup instance-based debug logging
+        {
+            std::lock_guard<std::mutex> lock(debugMutex);
+            debugEnabled = config.enableDebugLogging;
+
+            // Determine plugin name for log path
+            std::string pluginNameForLog = config.pluginName;
+            if (pluginNameForLog.empty()) {
+                pluginNameForLog = config.pluginId;  // Fallback to pluginId
+            }
+
+#if BEATCONNECT_USE_JUCE
+            if (!pluginNameForLog.empty()) {
+                auto appData = juce::File::getSpecialLocation(
+                    juce::File::userApplicationDataDirectory);
+                auto logDir = appData.getChildFile("BeatConnect")
+                                     .getChildFile(juce::String(pluginNameForLog));
+                logDir.createDirectory();
+                debugLogPath = logDir.getChildFile("debug.log")
+                                     .getFullPathName().toStdString();
+            }
+#else
+            debugLogPath = pluginNameForLog + "_debug.log";
+#endif
+
+            if (debugEnabled && !debugLogPath.empty()) {
+                // Clear log on init when enabled
+                std::ofstream ofs(debugLogPath, std::ios::trunc);
+                ofs << "=== Debug logging initialized for " << pluginNameForLog << " ===" << std::endl;
+            }
+        }
 
         // Set default state path if not provided
         if (config.statePath.empty()) {
 #if BEATCONNECT_USE_JUCE
             auto appData = juce::File::getSpecialLocation(
                 juce::File::userApplicationDataDirectory);
+            initLog("[Activation] appData: " + appData.getFullPathName().toStdString());
 
             statePath = appData.getChildFile("BeatConnect")
                               .getChildFile(config.pluginId)
                               .getChildFile("activation.json")
                               .getFullPathName().toStdString();
-
-            // Also set debug log path
-            debugLogPath = appData.getChildFile("BeatConnect")
-                                 .getChildFile(config.pluginId)
-                                 .getChildFile("debug.log")
-                                 .getFullPathName().toStdString();
-
-            // Ensure directory exists
-            juce::File(statePath).getParentDirectory().createDirectory();
+            initLog("[Activation] statePath: " + statePath);
 #else
             statePath = "activation.json";
-            debugLogPath = "debug.log";
 #endif
         } else {
             statePath = config.statePath;
         }
 
+        initLog("[Activation] about to call loadState()");
         loadState();
+        initLog("[Activation] loadState() returned, configure() complete");
     }
 
     bool isConfigured() const {
@@ -475,37 +599,28 @@ public:
 
     void loadState() {
 #if BEATCONNECT_USE_JUCE
+        initLog("[Activation] loadState() called");
+
         if (statePath.empty()) {
+            initLog("[Activation] loadState: statePath is empty, returning");
             return;
         }
 
+        initLog("[Activation] loadState: checking file at " + statePath);
         juce::File file(statePath);
 
-        if (file.existsAsFile()) {
+        initLog("[Activation] loadState: juce::File created");
+        bool exists = file.existsAsFile();
+        initLog("[Activation] loadState: existsAsFile() = " + std::string(exists ? "true" : "false"));
+
+        if (exists) {
+            initLog("[Activation] loadState: setting activated=true");
             activated = true;
             activationInfo.isValid = true;
-
-            // Try to load full state from JSON
-            auto content = file.loadFileAsString();
-            auto json = juce::JSON::parse(content);
-            if (auto* obj = json.getDynamicObject()) {
-                if (obj->hasProperty("activation_code")) {
-                    activationInfo.activationCode = obj->getProperty("activation_code").toString().toStdString();
-                }
-                if (obj->hasProperty("machine_id")) {
-                    activationInfo.machineId = obj->getProperty("machine_id").toString().toStdString();
-                }
-                if (obj->hasProperty("activated_at")) {
-                    activationInfo.activatedAt = obj->getProperty("activated_at").toString().toStdString();
-                }
-                if (obj->hasProperty("current_activations")) {
-                    activationInfo.currentActivations = static_cast<int>(obj->getProperty("current_activations"));
-                }
-                if (obj->hasProperty("max_activations")) {
-                    activationInfo.maxActivations = static_cast<int>(obj->getProperty("max_activations"));
-                }
-            }
+            initLog("[Activation] loadState: flags set");
         }
+
+        initLog("[Activation] loadState() complete");
 #endif
     }
 
@@ -553,27 +668,30 @@ private:
     mutable std::mutex mutex;
     ActivationConfig config;
     std::string statePath;
-    std::string debugLogPath;
     bool configured = false;
     bool activated = false;
-    bool debugEnabled = false;
     ActivationInfo activationInfo;
+
+    // Instance-based debug state (no global statics!)
+    mutable std::mutex debugMutex;
+    bool debugEnabled = false;
+    std::string debugLogPath;
     Activation::DebugCallback debugCallback;
 };
 
 // ==============================================================================
-// Activation Public Interface
+// Instance-based Implementation (NOT singleton)
 // ==============================================================================
 
-Activation::Activation() : pImpl(std::make_unique<Impl>()) {}
+Activation::Activation(const ActivationConfig& config) : pImpl(std::make_unique<Impl>()) {
+    pImpl->configure(config);
+}
+
 Activation::~Activation() = default;
 
-// Move operations
-Activation::Activation(Activation&&) noexcept = default;
-Activation& Activation::operator=(Activation&&) noexcept = default;
-
-void Activation::configure(const ActivationConfig& config) {
-    pImpl->configure(config);
+std::unique_ptr<Activation> Activation::create(const ActivationConfig& config) {
+    // Can't use make_unique because constructor is private
+    return std::unique_ptr<Activation>(new Activation(config));
 }
 
 bool Activation::isConfigured() const {
@@ -628,16 +746,20 @@ void Activation::setDebugCallback(DebugCallback callback) {
     pImpl->setDebugCallback(callback);
 }
 
-void Activation::setDebugEnabled(bool enabled) {
-    pImpl->setDebugEnabled(enabled);
-}
-
-bool Activation::isDebugEnabled() const {
-    return pImpl->isDebugEnabled();
+void Activation::debugLog(const std::string& message) {
+    pImpl->debugLog(message);
 }
 
 std::string Activation::getDebugLogPath() const {
     return pImpl->getDebugLogPath();
+}
+
+void Activation::revealDebugLog() {
+    pImpl->revealDebugLog();
+}
+
+bool Activation::isDebugEnabled() const {
+    return pImpl->isDebugEnabled();
 }
 
 } // namespace beatconnect

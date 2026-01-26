@@ -10,10 +10,6 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
-#if BEATCONNECT_ACTIVATION_ENABLED
-#include <beatconnect/Activation.h>
-#endif
-
 //==============================================================================
 class {{PLUGIN_NAME}}Processor : public juce::AudioProcessor
 {
@@ -65,17 +61,7 @@ public:
     juce::String getApiBaseUrl() const { return apiBaseUrl_; }
     juce::String getSupabaseKey() const { return supabasePublishableKey_; }
 
-#if BEATCONNECT_ACTIVATION_ENABLED
-    // Each processor owns its own Activation instance (no static/singleton!)
-    beatconnect::Activation& getActivation() { return activation_; }
-    const beatconnect::Activation& getActivation() const { return activation_; }
-#endif
-
 private:
-    //==============================================================================
-    // State version - increment when making breaking parameter changes
-    static constexpr int kStateVersion = 1;
-
     //==============================================================================
     // Parameters
     juce::AudioProcessorValueTreeState apvts;
@@ -88,11 +74,6 @@ private:
     juce::String apiBaseUrl_;
     juce::String supabasePublishableKey_;
     juce::var buildFlags_;
-
-#if BEATCONNECT_ACTIVATION_ENABLED
-    // Instance-based activation - avoids static member issues with multiple plugins
-    beatconnect::Activation activation_;
-#endif
 
     //==============================================================================
     // DSP - Add your processing members here

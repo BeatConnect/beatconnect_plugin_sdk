@@ -426,18 +426,18 @@ void BeccaToneAmpEditor::sendActivationState()
     juce::DynamicObject::Ptr data = new juce::DynamicObject();
 
 #if BEATCONNECT_ACTIVATION_ENABLED
-    auto& activation = processorRef.getActivation();  // Use instance member, NOT singleton
+    auto* activation = processorRef.getActivation();
 
-    // isConfigured = true when BEATCONNECT_ACTIVATION_ENABLED=1 and SDK was configured
-    bool isConfigured = true;
-    bool isActivated = activation.isActivated();
+    // isConfigured = true when activation instance exists
+    bool isConfigured = activation != nullptr;
+    bool isActivated = activation && activation->isActivated();
 
     data->setProperty("isConfigured", isConfigured);
     data->setProperty("isActivated", isActivated);
 
-    if (isActivated)
+    if (isActivated && activation)
     {
-        if (auto info = activation.getActivationInfo())
+        if (auto info = activation->getActivationInfo())
         {
             juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
             infoObj->setProperty("activationCode", juce::String(info->activationCode));
@@ -468,10 +468,11 @@ void BeccaToneAmpEditor::handleActivateLicense(const juce::var& data)
     // Use weak reference for async callback safety
     juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
 
-    auto& activation = processorRef.getActivation();  // Use instance member, NOT singleton
+    auto* activation = processorRef.getActivation();
+    if (!activation) return;
 
     // Perform activation asynchronously
-    activation.activateAsync(code.toStdString(),
+    activation->activateAsync(code.toStdString(),
         [safeThis](beatconnect::ActivationStatus status) {
             juce::MessageManager::callAsync([safeThis, status]() {
                 if (!safeThis)
@@ -499,17 +500,20 @@ void BeccaToneAmpEditor::handleActivateLicense(const juce::var& data)
                 if (status == beatconnect::ActivationStatus::Valid ||
                     status == beatconnect::ActivationStatus::AlreadyActive)
                 {
-                    auto& activation = safeThis->processorRef.getActivation();  // Use instance member, NOT singleton
-                    if (auto info = activation.getActivationInfo())
+                    auto* activation = safeThis->processorRef.getActivation();
+                    if (activation)
                     {
-                        juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
-                        infoObj->setProperty("activationCode", juce::String(info->activationCode));
-                        infoObj->setProperty("machineId", juce::String(info->machineId));
-                        infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
-                        infoObj->setProperty("currentActivations", info->currentActivations);
-                        infoObj->setProperty("maxActivations", info->maxActivations);
-                        infoObj->setProperty("isValid", info->isValid);
-                        result->setProperty("info", juce::var(infoObj.get()));
+                        if (auto info = activation->getActivationInfo())
+                        {
+                            juce::DynamicObject::Ptr infoObj = new juce::DynamicObject();
+                            infoObj->setProperty("activationCode", juce::String(info->activationCode));
+                            infoObj->setProperty("machineId", juce::String(info->machineId));
+                            infoObj->setProperty("activatedAt", juce::String(info->activatedAt));
+                            infoObj->setProperty("currentActivations", info->currentActivations);
+                            infoObj->setProperty("maxActivations", info->maxActivations);
+                            infoObj->setProperty("isValid", info->isValid);
+                            result->setProperty("info", juce::var(infoObj.get()));
+                        }
                     }
                 }
 
@@ -526,10 +530,12 @@ void BeccaToneAmpEditor::handleDeactivateLicense([[maybe_unused]] const juce::va
 #if BEATCONNECT_ACTIVATION_ENABLED
     juce::Component::SafePointer<BeccaToneAmpEditor> safeThis(this);
 
-    // Perform deactivation in background thread - capture processor ref for thread safety
-    auto& activation = processorRef.getActivation();
-    std::thread([safeThis, &activation]() {
-        auto status = activation.deactivate();  // Use instance member, NOT singleton
+    auto* activation = processorRef.getActivation();
+    if (!activation) return;
+
+    // Perform deactivation in background thread
+    std::thread([safeThis, activation]() {
+        auto status = activation->deactivate();
 
         juce::MessageManager::callAsync([safeThis, status]() {
             if (!safeThis)

@@ -13,6 +13,13 @@
 #include "ProjectData.h"
 #endif
 
+#if BEATCONNECT_ACTIVATION_ENABLED
+#include <beatconnect/Activation.h>
+#endif
+
+// Increment this when making breaking changes to parameter structure
+static constexpr int kStateVersion = 1;
+
 //==============================================================================
 {{PLUGIN_NAME}}Processor::{{PLUGIN_NAME}}Processor()
     : AudioProcessor(BusesProperties()
@@ -280,7 +287,7 @@ void {{PLUGIN_NAME}}Processor::loadProjectData()
     buildFlags_ = parsed.getProperty("flags", juce::var());
 
 #if BEATCONNECT_ACTIVATION_ENABLED
-    // Configure activation instance (owned by this processor - no singleton!)
+    // Configure activation SDK if enabled
     bool enableActivation = static_cast<bool>(buildFlags_.getProperty("enableActivationKeys", false));
 
     if (enableActivation && pluginId_.isNotEmpty())
@@ -289,7 +296,7 @@ void {{PLUGIN_NAME}}Processor::loadProjectData()
         config.apiBaseUrl = apiBaseUrl_.toStdString();
         config.pluginId = pluginId_.toStdString();
         config.supabaseKey = supabasePublishableKey_.toStdString();
-        activation_.configure(config);
+        beatconnect::Activation::getInstance().configure(config);
         DBG("BeatConnect Activation SDK configured for plugin: " + pluginId_);
     }
 #endif

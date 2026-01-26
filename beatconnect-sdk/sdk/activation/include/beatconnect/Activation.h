@@ -6,21 +6,22 @@
  * Provides license activation, validation, and deactivation for plugins
  * distributed through the BeatConnect platform.
  *
- * Usage:
- *   // In PluginProcessor.h - own an Activation instance
- *   beatconnect::Activation activation;
+ * IMPORTANT: This is NOT a singleton. Each plugin processor should own its
+ * own Activation instance to avoid conflicts when multiple plugin instances
+ * or versions are loaded in a DAW.
  *
- *   // In PluginProcessor.cpp - configure during construction
+ * Usage:
  *   beatconnect::ActivationConfig config;
  *   config.apiBaseUrl = "https://xxx.supabase.co";
  *   config.pluginId = "your-project-uuid";
- *   activation.configure(config);
+ *   config.supabaseKey = "your-publishable-key";
  *
- *   // In PluginEditor - get reference from processor
- *   auto& activation = processorRef.getActivation();
- *   if (!activation.isActivated()) {
+ *   // Create instance (store as member variable in your processor)
+ *   auto activation = beatconnect::Activation::create(config);
+ *
+ *   if (!activation->isActivated()) {
  *       // Show activation dialog
- *       auto status = activation.activate(userEnteredCode);
+ *       auto status = activation->activate(userEnteredCode);
  *       if (status == ActivationStatus::Valid) {
  *           // Success!
  *       }
@@ -33,6 +34,72 @@
 #include <optional>
 
 namespace beatconnect {
+
+// ==============================================================================
+// Debug Logging Utility (DEPRECATED - use Activation instance methods instead)
+// ==============================================================================
+
+/**
+ * @deprecated Use Activation::debugLog() and related instance methods instead.
+ *
+ * WARNING: This static class uses global state which causes issues when multiple
+ * plugin instances or versions are loaded in a DAW. Each plugin instance should
+ * use the debug methods on their own Activation instance instead.
+ *
+ * Old usage (DEPRECATED):
+ *   beatconnect::Debug::init("MyPlugin", true);
+ *   beatconnect::Debug::log("message");
+ *
+ * New usage (PREFERRED):
+ *   config.pluginName = "MyPlugin";
+ *   config.enableDebugLogging = true;
+ *   auto activation = Activation::create(config);
+ *   activation->debugLog("message");
+ */
+class [[deprecated("Use Activation instance debug methods instead")]] Debug {
+public:
+    /**
+     * Initialize debug logging for a plugin.
+     * @param pluginName Name used for the log folder (e.g., "MyPlugin")
+     * @param enabled Whether debug logging is enabled
+     */
+    static void init(const std::string& pluginName, bool enabled = false);
+
+    /**
+     * Check if debug logging is enabled.
+     */
+    static bool isEnabled();
+
+    /**
+     * Enable or disable debug logging at runtime.
+     */
+    static void setEnabled(bool enabled);
+
+    /**
+     * Log a debug message (only if enabled).
+     * Thread-safe.
+     */
+    static void log(const std::string& message);
+
+    /**
+     * Clear the debug log file.
+     */
+    static void clearLog();
+
+    /**
+     * Get the path to the debug log file.
+     */
+    static std::string getLogFilePath();
+
+    /**
+     * Open the folder containing the log file in the system file manager.
+     * Useful for helping users find logs for troubleshooting.
+     */
+    static void revealLogFile();
+
+private:
+    Debug() = delete;
+};
 
 // ==============================================================================
 // Activation Status
@@ -92,38 +159,44 @@ struct ActivationConfig {
 
     // Optional: How often to re-validate in seconds (default: 86400 = 24 hours, 0 = never)
     int revalidateIntervalSeconds = 86400;
+
+    // Optional: Plugin name for debug logging (e.g., "MyPlugin")
+    std::string pluginName;
+
+    // Optional: Enable debug logging (default: false)
+    bool enableDebugLogging = false;
 };
 
 // ==============================================================================
-// Activation Class
+// Activation Class (Instance-based, NOT singleton)
 // ==============================================================================
 
 /**
- * Activation manager for a single plugin instance.
- *
- * Each PluginProcessor should own its own Activation instance.
- * This avoids static state issues when multiple plugins are loaded.
+ * IMPORTANT: This class is NOT a singleton. Each plugin instance should create
+ * its own Activation instance using the create() factory method. This avoids
+ * issues when multiple plugin instances or versions are loaded in a DAW.
  */
 class Activation {
 public:
-    Activation();
+    /**
+     * Create a new Activation instance with the given configuration.
+     * Each plugin processor should own its own instance.
+     *
+     * @param config Configuration options
+     * @return Unique pointer to configured Activation instance
+     */
+    static std::unique_ptr<Activation> create(const ActivationConfig& config);
+
+    // Destructor must be public for unique_ptr
     ~Activation();
 
-    // Move-only (pImpl pattern)
-    Activation(Activation&&) noexcept;
-    Activation& operator=(Activation&&) noexcept;
+    // Prevent copying (but allow move for unique_ptr)
     Activation(const Activation&) = delete;
     Activation& operator=(const Activation&) = delete;
 
     // =========================================================================
     // Configuration
     // =========================================================================
-
-    /**
-     * Configure the activation instance. Must be called before any other methods.
-     * @param config Configuration options
-     */
-    void configure(const ActivationConfig& config);
 
     /**
      * Check if SDK has been configured.
@@ -229,7 +302,7 @@ public:
     std::string getMachineId() const;
 
     // =========================================================================
-    // Debug Logging
+    // Debug Logging (Instance-based)
     // =========================================================================
 
     using DebugCallback = std::function<void(const std::string&)>;
@@ -242,24 +315,30 @@ public:
     void setDebugCallback(DebugCallback callback);
 
     /**
-     * Enable or disable debug mode.
-     * When enabled, logs are written to:
-     *   Windows: %APPDATA%/BeatConnect/<pluginId>/debug.log
-     *   macOS:   ~/Library/Application Support/BeatConnect/<pluginId>/debug.log
+     * Log a debug message (if debug logging is enabled in config).
+     * Thread-safe. Each instance logs to its own file.
      */
-    void setDebugEnabled(bool enabled);
+    void debugLog(const std::string& message);
 
     /**
-     * Check if debug mode is enabled.
-     */
-    bool isDebugEnabled() const;
-
-    /**
-     * Get path to the debug log file.
+     * Get the path to this instance's debug log file.
      */
     std::string getDebugLogPath() const;
 
+    /**
+     * Open the folder containing the log file in the system file manager.
+     */
+    void revealDebugLog();
+
+    /**
+     * Check if debug logging is enabled for this instance.
+     */
+    bool isDebugEnabled() const;
+
 private:
+    // Private constructor - use create() factory method
+    explicit Activation(const ActivationConfig& config);
+
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
