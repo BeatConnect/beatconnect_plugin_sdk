@@ -14,10 +14,9 @@ out/
 # Dependencies
 node_modules/
 
-# Web build output (should be built fresh)
-web/dist/
-**/Resources/WebUI/assets/
-**/Resources/WebUI/index.html
+# Web build output (rebuild from web-ui/)
+Resources/WebUI/assets/
+Resources/WebUI/index.html
 
 # OS files
 .DS_Store
@@ -26,6 +25,3 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.log
-
-# Keep gitkeep files
-!.gitkeep

@@ -2,6 +2,26 @@
 
 This file provides instructions for Claude Code when creating or working with VST3/AU plugins that integrate with the BeatConnect platform.
 
+## CANONICAL REFERENCE IMPLEMENTATION
+
+**CRITICAL:** The `example-plugin/` directory in this SDK is the canonical reference implementation. When creating or debugging plugins, **ALWAYS compare your code against this example** to ensure patterns match exactly.
+
+```
+beatconnect_plugin_sdk/
+└── example-plugin/          <-- CANONICAL REFERENCE
+    ├── Source/
+    │   ├── PluginEditor.cpp   # Constructor order, setupWebView, setupAttachments
+    │   ├── PluginEditor.h
+    │   ├── PluginProcessor.cpp # State versioning, parameter layout
+    │   ├── PluginProcessor.h
+    │   └── ParameterIDs.h     # inline constexpr pattern
+    ├── web-ui/src/
+    │   ├── lib/juce-bridge.ts  # JUCE 8 bridge (built-in state accessors)
+    │   ├── hooks/useJuceParam.ts # React hooks with proper state handling
+    │   └── App.tsx
+    └── CMakeLists.txt         # POST_BUILD copy commands
+```
+
 ## Architecture Overview
 
 BeatConnect plugins use a **Web/JUCE 8 Hybrid Architecture**:
@@ -32,6 +52,38 @@ This enables:
 3. **Attachments connect** relays to APVTS parameters
 4. **TypeScript accesses** `window.__JUCE__.backend` for sync
 5. **Events flow bidirectionally** - changes from either side sync automatically
+
+## CRITICAL: PluginEditor Constructor Order
+
+**THIS IS THE #1 CAUSE OF BLACK SCREEN ISSUES.**
+
+The constructor MUST follow this exact order:
+
+```cpp
+MyPluginEditor::MyPluginEditor(MyPluginProcessor& p)
+    : AudioProcessorEditor(&p), processorRef(p)
+{
+    // CRITICAL ORDER - DO NOT CHANGE:
+    // 1. setupWebView() - creates relays AND WebBrowserComponent
+    // 2. setupAttachments() - connects relays to APVTS (AFTER WebView exists)
+    // 3. setSize() - MUST be AFTER WebView exists so resized() can set bounds
+
+    setupWebView();
+    setupAttachments();
+
+    setSize(850, 550);  // AFTER WebView!
+    setResizable(false, false);
+
+    startTimerHz(30);
+}
+```
+
+**Why this order matters:**
+- `resized()` is called from `setSize()`
+- `resized()` sets `webView->setBounds(getLocalBounds())`
+- If `webView` is nullptr when `resized()` runs → **black screen or crash**
+
+See `example-plugin/Source/PluginEditor.cpp` for the complete implementation.
 
 ## Project Structure
 
@@ -421,15 +473,28 @@ void prepare(const juce::dsp::ProcessSpec& spec)
 
 ## Common Mistakes to Avoid
 
-1. **Creating WebBrowserComponent before relays** - Relays MUST exist first
-2. **Mismatched identifiers** - "gain" in C++ must match "gain" in TypeScript exactly
-3. **Using postMessage for parameters** - Use the relay system instead
-4. **Forgetting NEEDS_WEBVIEW2** - Required for Windows WebView2 support
-5. **Not calling dragStart/dragEnd** - Needed for proper undo/redo grouping
-6. **No state versioning** - Causes crashes when parameters change between versions
-7. **Smoothed values not reset on bypass** - Causes clicks when re-enabling effects
-8. **Fixed buffer sizes** - Causes crackling in DAWs with variable buffer sizes
-9. **UI state not in APVTS** - All persistent state must be APVTS parameters
+### Black Screen Issues (Most Common!)
+1. **setSize() called before setupWebView()** - `resized()` can't set WebView bounds if `webView` is nullptr
+2. **Creating WebBrowserComponent before relays** - Relays MUST exist first for `.withOptionsFrom()` to work
+3. **Attachments created before WebBrowserComponent** - Attachments need the WebView to exist
+
+### Parameter Issues
+4. **Mismatched identifiers** - "gain" in C++ must match "gain" in TypeScript EXACTLY (case-sensitive)
+5. **Using postMessage for parameters** - Use the JUCE 8 relay system instead
+6. **useRef initialized before JUCE ready** - Re-fetch state in useEffect, not just initial useRef
+7. **Toggle reading from stateRef instead of local state** - Use React state for toggle logic
+8. **Not calling dragStart/dragEnd** - Needed for proper undo/redo grouping
+
+### Build Issues
+9. **Forgetting NEEDS_WEBVIEW2** - Required for Windows WebView2
+10. **No POST_BUILD copy commands** - WebUI files won't be in plugin bundle
+11. **Wrong resource path in resource provider** - Check platform-specific bundle structure
+
+### State Issues
+12. **No state versioning** - Causes crashes when parameters change between versions
+13. **Smoothed values not reset on bypass** - Causes clicks when re-enabling effects
+14. **Fixed buffer sizes** - Causes crackling in DAWs with variable buffer sizes
+15. **UI state not in APVTS** - All persistent state must be APVTS parameters
 
 ## Pre-Release Checklist
 
@@ -483,25 +548,43 @@ Before building a new plugin, verify:
 - [ ] `web-ui/` folder contains: package.json, vite.config.ts, tsconfig.json, src/
 - [ ] `Resources/WebUI/` folder exists (can be empty with .gitkeep)
 
-### CMakeLists.txt
-- [ ] All placeholders replaced (search for `{{` to verify none remain)
-- [ ] SDK added BEFORE plugin target (`add_subdirectory(beatconnect-sdk/sdk/activation)`)
-- [ ] SDK linked to cryptography (`target_link_libraries(beatconnect_activation PRIVATE juce::juce_cryptography)`)
-- [ ] `beatconnect_activation` in plugin's link libraries
-- [ ] `JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1` in compile definitions
-- [ ] WebUI copy commands use `Resources/WebUI` as source path
-- [ ] Windows installed VST3 copy command present
+### C++ Source - Constructor Order (CRITICAL!)
+- [ ] **setupWebView() called FIRST in constructor**
+- [ ] **setupAttachments() called SECOND** (after WebView exists)
+- [ ] **setSize() called LAST** (after WebView exists so resized() works)
+- [ ] All relays created BEFORE WebBrowserComponent (inside setupWebView)
+- [ ] All relays registered with `.withOptionsFrom()`
+- [ ] All attachments created AFTER WebBrowserComponent (inside setupAttachments)
+- [ ] Resource provider function implemented with proper MIME types
+- [ ] Destructor stops timer BEFORE other cleanup
 
-### C++ Source
+### C++ Source - Parameters & State
 - [ ] ParameterIDs.h uses `inline constexpr const char*` for all IDs
+- [ ] Parameter IDs match relay names EXACTLY (case-sensitive!)
 - [ ] State version constant defined in PluginProcessor.cpp
-- [ ] All relays created BEFORE WebBrowserComponent
+- [ ] State version incremented when parameters change
 - [ ] Unique WebView2 user data folder name per plugin
 
+### CMakeLists.txt
+- [ ] All placeholders replaced (search for `{{` to verify none remain)
+- [ ] `NEEDS_WEBVIEW2 TRUE` in juce_add_plugin
+- [ ] `JUCE_WEB_BROWSER=1` and `JUCE_USE_WIN_WEBVIEW2=1` defined
+- [ ] POST_BUILD commands copy WebUI to VST3 bundle
+- [ ] POST_BUILD commands copy WebUI to Standalone
+- [ ] SDK added BEFORE plugin target (if using activation)
+- [ ] Windows installed VST3 copy command present
+
 ### Web UI
-- [ ] Parameter IDs in TypeScript match ParameterIDs.h exactly
+- [ ] juce-bridge.ts uses `window.__JUCE__.getSliderState()` (NOT custom protocol)
+- [ ] useJuceParam hooks re-fetch state in useEffect (not just useRef initial)
+- [ ] Toggle callbacks use local React state, not `stateRef.current.getValue()`
+- [ ] Parameter IDs in TypeScript match ParameterIDs.h EXACTLY (case-sensitive!)
+- [ ] dragStart/dragEnd wired for slider controls
 - [ ] vite.config.ts has `base: './'` for relative paths
-- [ ] Predictable asset naming in rollupOptions
+- [ ] vite.config.ts outputs to `../Resources/WebUI`
 
 ### GitHub
 - [ ] `beatconnect-plugin` topic added to repo for auto-discovery
+
+### Quick Validation
+**Compare your code against `example-plugin/` in the SDK to verify patterns match!**
