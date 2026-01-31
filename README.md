@@ -18,6 +18,53 @@ Once approved, you'll have access to:
 
 Check your dashboard at [beatconnect.com](https://beatconnect.com) for current build quotas and plan limits.
 
+## AI-Assisted Development
+
+This SDK is designed to work seamlessly with AI coding assistants like [Claude Code](https://claude.ai/code). Whether you're new to plugin development or just want to move faster, AI can help you scaffold, debug, and iterate on your plugins.
+
+### Getting Set Up
+
+1. **Clone this SDK** to your machine
+2. **Open in Claude Code** or your preferred AI-enabled IDE
+3. **Use the built-in skills** to scaffold and modify your plugin
+
+### Available Skills
+
+| Skill | What it does |
+|-------|--------------|
+| `/new-plugin` | Scaffold a complete new plugin from templates with your branding |
+
+### Example Prompts
+
+Here are some ways to work with Claude on your plugin:
+
+**Starting a new project:**
+```
+/new-plugin "LoFi Tape" by "AudioCraft" - a vintage tape saturation plugin
+```
+
+**Adding features:**
+```
+Add a wet/dry mix parameter to my plugin with a range of 0-100%
+```
+
+**Debugging:**
+```
+My plugin crashes when I load it in Ableton - help me debug the initialization
+```
+
+**UI work:**
+```
+Create a vintage-style knob component for the saturation control
+```
+
+**Learning:**
+```
+Explain how the JUCE 8 WebSliderRelay system works
+```
+
+The SDK includes a `CLAUDE.md` file with detailed context about the codebase, so AI assistants can understand the architecture and patterns automatically.
+
 ## Features
 
 - **Web/JUCE 8 Hybrid Architecture** - React UI + C++ audio processing with native relay system
