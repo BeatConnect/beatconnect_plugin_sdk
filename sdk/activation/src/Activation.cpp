@@ -44,100 +44,6 @@ const char* activationStatusToString(ActivationStatus status) {
 }
 
 // ==============================================================================
-// Debug Logging Implementation
-// ==============================================================================
-
-namespace {
-    std::mutex g_debugMutex;
-    std::string g_pluginName;
-    bool g_debugEnabled = false;
-    std::string g_logFilePath;
-
-    std::string getTimestamp() {
-#if BEATCONNECT_USE_JUCE
-        return juce::Time::getCurrentTime().toString(false, true, true, true).toStdString();
-#else
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        char buf[32];
-        std::strftime(buf, sizeof(buf), "%H:%M:%S", std::localtime(&time));
-        return buf;
-#endif
-    }
-}
-
-void Debug::init(const std::string& pluginName, bool enabled) {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    g_pluginName = pluginName;
-    g_debugEnabled = enabled;
-
-#if BEATCONNECT_USE_JUCE
-    // Build log file path: AppData/BeatConnect/<pluginName>/debug.log
-    auto appData = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
-    auto logDir = appData.getChildFile("BeatConnect").getChildFile(juce::String(pluginName));
-    logDir.createDirectory();
-    g_logFilePath = logDir.getChildFile("debug.log").getFullPathName().toStdString();
-#else
-    g_logFilePath = pluginName + "_debug.log";
-#endif
-
-    if (enabled) {
-        // Clear log on init when enabled
-        std::ofstream ofs(g_logFilePath, std::ios::trunc);
-        ofs << "[" << getTimestamp() << "] === Debug logging initialized for " << pluginName << " ===" << std::endl;
-    }
-}
-
-bool Debug::isEnabled() {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    return g_debugEnabled;
-}
-
-void Debug::setEnabled(bool enabled) {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    g_debugEnabled = enabled;
-}
-
-void Debug::log(const std::string& message) {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    if (!g_debugEnabled || g_logFilePath.empty()) return;
-
-    std::ofstream ofs(g_logFilePath, std::ios::app);
-    if (ofs.is_open()) {
-        ofs << "[" << getTimestamp() << "] " << message << std::endl;
-    }
-
-#if BEATCONNECT_USE_JUCE
-    DBG(juce::String("[BeatConnect] " + message));
-#endif
-}
-
-void Debug::clearLog() {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    if (g_logFilePath.empty()) return;
-
-#if BEATCONNECT_USE_JUCE
-    juce::File(g_logFilePath).deleteFile();
-#else
-    std::ofstream ofs(g_logFilePath, std::ios::trunc);
-#endif
-}
-
-std::string Debug::getLogFilePath() {
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    return g_logFilePath;
-}
-
-void Debug::revealLogFile() {
-#if BEATCONNECT_USE_JUCE
-    std::lock_guard<std::mutex> lock(g_debugMutex);
-    if (!g_logFilePath.empty()) {
-        juce::File(g_logFilePath).revealToUser();
-    }
-#endif
-}
-
-// ==============================================================================
 // Implementation Class
 // ==============================================================================
 
@@ -693,6 +599,170 @@ std::unique_ptr<Activation> Activation::create(const ActivationConfig& config) {
     // Can't use make_unique because constructor is private
     return std::unique_ptr<Activation>(new Activation(config));
 }
+
+// ==============================================================================
+// Build Data Utilities
+// ==============================================================================
+
+#if BEATCONNECT_USE_JUCE
+
+namespace {
+    // Get path to project_data.json in the plugin's resources
+    juce::File getProjectDataFile() {
+        // The build system places project_data.json in the resources folder
+        // which gets embedded in the plugin bundle
+
+        // On macOS: Plugin.vst3/Contents/Resources/project_data.json
+        // On Windows: Plugin.vst3/Contents/Resources/project_data.json (same structure)
+
+        // First, try to find it relative to the executable
+        auto execFile = juce::File::getSpecialLocation(
+            juce::File::currentExecutableFile);
+
+        // Navigate up to find the bundle root
+        auto bundleRoot = execFile;
+        for (int i = 0; i < 5 && bundleRoot.exists(); ++i) {
+            auto resourcesDir = bundleRoot.getChildFile("Contents").getChildFile("Resources");
+            auto projectDataFile = resourcesDir.getChildFile("project_data.json");
+
+            if (projectDataFile.existsAsFile()) {
+                return projectDataFile;
+            }
+
+            // Also check for resources directly in current dir (Windows standalone)
+            auto directResourceFile = bundleRoot.getChildFile("resources")
+                                                .getChildFile("project_data.json");
+            if (directResourceFile.existsAsFile()) {
+                return directResourceFile;
+            }
+
+            bundleRoot = bundleRoot.getParentDirectory();
+        }
+
+        // Fallback: check common development locations
+        auto currentDir = juce::File::getCurrentWorkingDirectory();
+        auto devResourceFile = currentDir.getChildFile("resources")
+                                         .getChildFile("project_data.json");
+        if (devResourceFile.existsAsFile()) {
+            return devResourceFile;
+        }
+
+        // Return empty file if not found
+        return juce::File();
+    }
+}
+
+bool Activation::isBuildDataAvailable() {
+    auto projectDataFile = getProjectDataFile();
+    return projectDataFile.existsAsFile();
+}
+
+std::optional<ActivationConfig> Activation::loadConfigFromBuildData() {
+    auto projectDataFile = getProjectDataFile();
+
+    if (!projectDataFile.existsAsFile()) {
+        DBG("[BeatConnect] project_data.json not found - running in development mode?");
+        return std::nullopt;
+    }
+
+    auto jsonContent = projectDataFile.loadFileAsString();
+    if (jsonContent.isEmpty()) {
+        DBG("[BeatConnect] project_data.json is empty");
+        return std::nullopt;
+    }
+
+    auto json = juce::JSON::parse(jsonContent);
+    if (json.isVoid()) {
+        DBG("[BeatConnect] Failed to parse project_data.json");
+        return std::nullopt;
+    }
+
+    auto* obj = json.getDynamicObject();
+    if (!obj) {
+        DBG("[BeatConnect] project_data.json is not a valid JSON object");
+        return std::nullopt;
+    }
+
+    ActivationConfig config;
+
+    // Extract required fields
+    if (obj->hasProperty("pluginId")) {
+        config.pluginId = obj->getProperty("pluginId").toString().toStdString();
+    }
+
+    if (obj->hasProperty("apiBaseUrl")) {
+        config.apiBaseUrl = obj->getProperty("apiBaseUrl").toString().toStdString();
+    }
+
+    if (obj->hasProperty("supabasePublishableKey")) {
+        config.supabaseKey = obj->getProperty("supabasePublishableKey").toString().toStdString();
+    }
+
+    // Extract plugin name from _meta if available
+    if (obj->hasProperty("_meta")) {
+        auto meta = obj->getProperty("_meta");
+        if (auto* metaObj = meta.getDynamicObject()) {
+            if (metaObj->hasProperty("name")) {
+                config.pluginName = metaObj->getProperty("name").toString().toStdString();
+            }
+        }
+    }
+
+    // Validate required fields
+    if (config.pluginId.empty() || config.apiBaseUrl.empty() || config.supabaseKey.empty()) {
+        DBG("[BeatConnect] project_data.json missing required fields (pluginId, apiBaseUrl, or supabasePublishableKey)");
+        return std::nullopt;
+    }
+
+    DBG("[BeatConnect] Loaded config from project_data.json:");
+    DBG("  pluginId: " + juce::String(config.pluginId));
+    DBG("  apiBaseUrl: " + juce::String(config.apiBaseUrl));
+    DBG("  pluginName: " + juce::String(config.pluginName));
+
+    return config;
+}
+
+std::unique_ptr<Activation> Activation::createFromBuildData(
+    const std::string& pluginName,
+    bool enableDebug)
+{
+    auto configOpt = loadConfigFromBuildData();
+
+    if (!configOpt.has_value()) {
+        DBG("[BeatConnect] createFromBuildData: No build data available");
+        return nullptr;
+    }
+
+    auto config = configOpt.value();
+
+    // Override with provided values if set
+    if (!pluginName.empty()) {
+        config.pluginName = pluginName;
+    }
+    config.enableDebugLogging = enableDebug;
+
+    return create(config);
+}
+
+#else
+
+// Non-JUCE implementations (stubs for now)
+bool Activation::isBuildDataAvailable() {
+    return false;
+}
+
+std::optional<ActivationConfig> Activation::loadConfigFromBuildData() {
+    return std::nullopt;
+}
+
+std::unique_ptr<Activation> Activation::createFromBuildData(
+    const std::string& /* pluginName */,
+    bool /* enableDebug */)
+{
+    return nullptr;
+}
+
+#endif
 
 bool Activation::isConfigured() const {
     return pImpl->isConfigured();

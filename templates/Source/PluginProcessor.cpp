@@ -258,6 +258,15 @@ bool {{PLUGIN_NAME}}Processor::hasActivationEnabled() const
 #endif
 }
 
+beatconnect::Activation* {{PLUGIN_NAME}}Processor::getActivation()
+{
+#if BEATCONNECT_ACTIVATION_ENABLED
+    return activation_.get();
+#else
+    return nullptr;
+#endif
+}
+
 void {{PLUGIN_NAME}}Processor::loadProjectData()
 {
 #if HAS_PROJECT_DATA
@@ -286,22 +295,25 @@ void {{PLUGIN_NAME}}Processor::loadProjectData()
     supabasePublishableKey_ = parsed.getProperty("supabasePublishableKey", "").toString();
     buildFlags_ = parsed.getProperty("flags", juce::var());
 
-#if BEATCONNECT_ACTIVATION_ENABLED
-    // Configure activation SDK if enabled
-    bool enableActivation = static_cast<bool>(buildFlags_.getProperty("enableActivationKeys", false));
-
-    if (enableActivation && pluginId_.isNotEmpty())
-    {
-        beatconnect::ActivationConfig config;
-        config.apiBaseUrl = apiBaseUrl_.toStdString();
-        config.pluginId = pluginId_.toStdString();
-        config.supabaseKey = supabasePublishableKey_.toStdString();
-        beatconnect::Activation::getInstance().configure(config);
-        DBG("BeatConnect Activation SDK configured for plugin: " + pluginId_);
-    }
+    DBG("Loaded BeatConnect project data - Plugin ID: " + pluginId_);
 #endif
 
-    DBG("Loaded BeatConnect project data - Plugin ID: " + pluginId_);
+#if BEATCONNECT_ACTIVATION_ENABLED
+    // Auto-configure activation from build data
+    // The BeatConnect build system injects credentials into project_data.json
+    activation_ = beatconnect::Activation::createFromBuildData(
+        JucePlugin_Name,  // Use plugin name for debug logging
+        false             // Disable debug logging in production
+    );
+
+    if (activation_)
+    {
+        DBG("BeatConnect Activation SDK initialized for: " + pluginId_);
+    }
+    else
+    {
+        DBG("BeatConnect Activation SDK not available (development mode?)");
+    }
 #endif
 }
 

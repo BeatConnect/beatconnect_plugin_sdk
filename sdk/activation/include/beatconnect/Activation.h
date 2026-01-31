@@ -10,14 +10,9 @@
  * own Activation instance to avoid conflicts when multiple plugin instances
  * or versions are loaded in a DAW.
  *
- * Usage:
- *   beatconnect::ActivationConfig config;
- *   config.apiBaseUrl = "https://xxx.supabase.co";
- *   config.pluginId = "your-project-uuid";
- *   config.supabaseKey = "your-publishable-key";
- *
- *   // Create instance (store as member variable in your processor)
- *   auto activation = beatconnect::Activation::create(config);
+ * RECOMMENDED USAGE (Auto-configured from build):
+ *   // The build system injects project_data.json with all credentials
+ *   auto activation = beatconnect::Activation::createFromBuildData();
  *
  *   if (!activation->isActivated()) {
  *       // Show activation dialog
@@ -26,6 +21,13 @@
  *           // Success!
  *       }
  *   }
+ *
+ * MANUAL USAGE (For testing or custom setups):
+ *   beatconnect::ActivationConfig config;
+ *   config.apiBaseUrl = "https://xxx.supabase.co";
+ *   config.pluginId = "your-project-uuid";
+ *   config.supabaseKey = "your-publishable-key";
+ *   auto activation = beatconnect::Activation::create(config);
  */
 
 #include <string>
@@ -34,72 +36,6 @@
 #include <optional>
 
 namespace beatconnect {
-
-// ==============================================================================
-// Debug Logging Utility (DEPRECATED - use Activation instance methods instead)
-// ==============================================================================
-
-/**
- * @deprecated Use Activation::debugLog() and related instance methods instead.
- *
- * WARNING: This static class uses global state which causes issues when multiple
- * plugin instances or versions are loaded in a DAW. Each plugin instance should
- * use the debug methods on their own Activation instance instead.
- *
- * Old usage (DEPRECATED):
- *   beatconnect::Debug::init("MyPlugin", true);
- *   beatconnect::Debug::log("message");
- *
- * New usage (PREFERRED):
- *   config.pluginName = "MyPlugin";
- *   config.enableDebugLogging = true;
- *   auto activation = Activation::create(config);
- *   activation->debugLog("message");
- */
-class [[deprecated("Use Activation instance debug methods instead")]] Debug {
-public:
-    /**
-     * Initialize debug logging for a plugin.
-     * @param pluginName Name used for the log folder (e.g., "MyPlugin")
-     * @param enabled Whether debug logging is enabled
-     */
-    static void init(const std::string& pluginName, bool enabled = false);
-
-    /**
-     * Check if debug logging is enabled.
-     */
-    static bool isEnabled();
-
-    /**
-     * Enable or disable debug logging at runtime.
-     */
-    static void setEnabled(bool enabled);
-
-    /**
-     * Log a debug message (only if enabled).
-     * Thread-safe.
-     */
-    static void log(const std::string& message);
-
-    /**
-     * Clear the debug log file.
-     */
-    static void clearLog();
-
-    /**
-     * Get the path to the debug log file.
-     */
-    static std::string getLogFilePath();
-
-    /**
-     * Open the folder containing the log file in the system file manager.
-     * Useful for helping users find logs for troubleshooting.
-     */
-    static void revealLogFile();
-
-private:
-    Debug() = delete;
-};
 
 // ==============================================================================
 // Activation Status
@@ -179,8 +115,31 @@ struct ActivationConfig {
 class Activation {
 public:
     /**
-     * Create a new Activation instance with the given configuration.
-     * Each plugin processor should own its own instance.
+     * Create a new Activation instance auto-configured from build data.
+     *
+     * This is the RECOMMENDED way to create an Activation instance.
+     * The BeatConnect build system injects project_data.json into your
+     * plugin's resources folder with all necessary credentials:
+     * - pluginId (your project UUID)
+     * - apiBaseUrl (BeatConnect API endpoint)
+     * - supabasePublishableKey (for API authentication)
+     *
+     * You do NOT need to set these manually - they are injected at build time.
+     *
+     * @param pluginName Optional plugin name for debug logging
+     * @param enableDebug Enable debug logging (default: false)
+     * @return Unique pointer to configured Activation instance, or nullptr if
+     *         project_data.json is not found (e.g., running in development)
+     */
+    static std::unique_ptr<Activation> createFromBuildData(
+        const std::string& pluginName = "",
+        bool enableDebug = false);
+
+    /**
+     * Create a new Activation instance with manual configuration.
+     *
+     * Use this for testing or custom setups where you need to specify
+     * credentials manually. For production builds, prefer createFromBuildData().
      *
      * @param config Configuration options
      * @return Unique pointer to configured Activation instance
@@ -193,6 +152,23 @@ public:
     // Prevent copying (but allow move for unique_ptr)
     Activation(const Activation&) = delete;
     Activation& operator=(const Activation&) = delete;
+
+    // =========================================================================
+    // Build Data Utilities
+    // =========================================================================
+
+    /**
+     * Check if build data (project_data.json) is available.
+     * Returns true if the file exists in the resources folder.
+     * Useful for checking if running from a BeatConnect build vs development.
+     */
+    static bool isBuildDataAvailable();
+
+    /**
+     * Load configuration from build data (project_data.json).
+     * Returns a populated ActivationConfig if successful, or nullopt if not found.
+     */
+    static std::optional<ActivationConfig> loadConfigFromBuildData();
 
     // =========================================================================
     // Configuration

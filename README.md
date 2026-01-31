@@ -1,16 +1,35 @@
 # BeatConnect Plugin SDK
 
-SDK for building VST3/AU plugins that integrate with BeatConnect's distribution platform.
+Build and distribute professional VST3/AU audio plugins with BeatConnect's complete development platform.
+
+## Getting Started
+
+Before diving into the code, you'll need a BeatConnect developer account:
+
+1. **Sign up at [beatconnect.com](https://beatconnect.com)**
+2. **Request Developer Access** from your account settings
+3. **Create a new project** in the developer dashboard
+
+Once approved, you'll have access to:
+- **Cloud Build Pipeline** - Automated compilation for Windows & macOS
+- **Code Signing** - Automatic signing for trusted installs
+- **License Activation** - Built-in copy protection with machine fingerprinting
+- **Distribution** - Hosted downloads with Stripe payment integration
+
+Check your dashboard at [beatconnect.com](https://beatconnect.com) for current build quotas and plan limits.
 
 ## Features
 
 - **Web/JUCE 8 Hybrid Architecture** - React UI + C++ audio processing with native relay system
 - **Activation System** - License validation with machine fingerprinting
+- **Preset Management** - Factory and user preset save/load system
 - **Asset Downloads** - Download samples, presets, and content from BeatConnect
 - **Build Pipeline Integration** - Automated compilation and code signing
 - **Distribution** - Signed downloads, Stripe payments
 
 ## Quick Start
+
+Once you have developer access, you can start building locally:
 
 ### 1. Create a new plugin from template
 
@@ -56,54 +75,84 @@ cmake --build build --config Release
 
 ### Activation SDK (`sdk/activation/`)
 
-License activation with machine fingerprinting:
+License activation with machine fingerprinting. **No manual configuration required** - credentials are automatically injected by the BeatConnect build system.
+
+#### Recommended Usage (Auto-configured)
+
+When you build through BeatConnect, the build system injects `project_data.json` into your plugin's resources folder with all necessary credentials. Your code just needs to call `createFromBuildData()`:
 
 ```cpp
 #include <beatconnect/Activation.h>
 
-// Configure (apiBaseUrl is the Supabase URL WITHOUT /functions/v1)
-beatconnect::ActivationConfig config;
-config.apiBaseUrl = "https://xxx.supabase.co";  // SDK adds /functions/v1 internally
-config.pluginId = "your-project-uuid";
-config.supabaseKey = "your-publishable-key";    // For API auth headers
+// In your PluginProcessor constructor or loadProjectData():
+#if BEATCONNECT_ACTIVATION_ENABLED
+    // Auto-configured from project_data.json injected by BeatConnect build
+    activation_ = beatconnect::Activation::createFromBuildData(
+        JucePlugin_Name,  // Plugin name for debug logging
+        false             // Disable debug logging in production
+    );
 
-auto& activation = beatconnect::Activation::getInstance();
-activation.configure(config);
+    if (activation_) {
+        DBG("BeatConnect Activation SDK initialized");
+    } else {
+        DBG("Running in development mode (no build data)");
+    }
+#endif
 
-// Check on startup
-if (!activation.isActivated()) {
+// In your UI layer, check activation status:
+if (activation_ && !activation_->isActivated()) {
     showActivationDialog();
 }
 
-// Activate (supports UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-auto status = activation.activate(userEnteredCode);
+// Activate with user-entered code (UUID format supported)
+auto status = activation_->activate(userEnteredCode);
 if (status == beatconnect::ActivationStatus::Valid) {
     // Success! State is automatically saved.
 }
 ```
 
-**Important**: The SDK does NOT perform network validation during `configure()`. This is intentional - many DAWs (Ableton, Logic) reject plugins that make network requests during initialization. Trigger validation from the UI layer after the plugin is fully loaded if needed.
+#### Manual Configuration (Testing Only)
 
-### Debug Logging (`beatconnect::Debug`)
-
-Cross-platform debug logging for troubleshooting:
+For local testing without the BeatConnect build pipeline:
 
 ```cpp
-#include <beatconnect/Activation.h>  // Debug is in same header
+beatconnect::ActivationConfig config;
+config.apiBaseUrl = "https://xxx.supabase.co";  // SDK adds /functions/v1 internally
+config.pluginId = "your-project-uuid";
+config.supabaseKey = "your-publishable-key";
+config.pluginName = "MyPlugin";
+config.enableDebugLogging = true;
 
-// Initialize in your PluginEditor constructor
-// Logs written to: AppData/BeatConnect/<pluginName>/debug.log
-bool debugEnabled = getDebugFlagFromConfig();
-beatconnect::Debug::init("MyPlugin", debugEnabled);
+auto activation = beatconnect::Activation::create(config);
+```
 
-// Log messages (thread-safe, no-op if disabled)
-beatconnect::Debug::log("Starting activation...");
-beatconnect::Debug::log("Result: " + statusString);
+**Important Notes**:
+- The SDK does NOT perform network validation during creation. This is intentional - many DAWs (Ableton, Logic) reject plugins that make network requests during initialization.
+- Each plugin instance should own its own `Activation` instance (NOT a singleton) to avoid conflicts when multiple plugin instances are loaded.
+- `createFromBuildData()` returns `nullptr` when running in development without build data.
+
+### Debug Logging (Instance-based)
+
+Each Activation instance has its own debug logging:
+
+```cpp
+// Enable via createFromBuildData second parameter
+activation_ = beatconnect::Activation::createFromBuildData("MyPlugin", true);
+
+// Or via config for manual setup
+config.enableDebugLogging = true;
+
+// Log messages (thread-safe)
+activation_->debugLog("Starting activation...");
+activation_->debugLog("Result: " + statusString);
 
 // Show user where logs are (opens folder in file manager)
-if (beatconnect::Debug::isEnabled()) {
-    beatconnect::Debug::revealLogFile();
+if (activation_->isDebugEnabled()) {
+    activation_->revealDebugLog();
 }
+
+// Get log path
+std::string logPath = activation_->getDebugLogPath();
 ```
 
 Log file locations:
@@ -133,6 +182,61 @@ auto [status, filePath] = downloader.download(assetId,
     });
 ```
 
+### Preset Manager (`templates/Source/`)
+
+User and factory preset management with C++/React integration:
+
+```cpp
+#include "PresetManager.h"
+
+// In your processor
+PresetManager presetManager(apvts, JucePlugin_Name);
+
+// Define factory presets
+presetManager.setFactoryPresets({
+    "Default", "Clean", "Warm", "Bright"
+});
+
+// Save user preset
+presetManager.saveUserPreset("My Custom Sound");
+
+// Load preset
+presetManager.loadPreset("My Custom Sound", false);  // false = user preset
+presetManager.loadPreset("Default", true);           // true = factory preset
+
+// Get JSON for UI
+juce::String json = presetManager.getPresetListAsJson();
+```
+
+```tsx
+// React: Use the preset hook
+import { usePresets } from './hooks/usePresets';
+
+function PresetSelector() {
+  const {
+    factoryPresets,
+    userPresets,
+    currentPreset,
+    savePreset,
+    loadPreset,
+    deletePreset
+  } = usePresets();
+
+  return (
+    <select onChange={(e) => loadPreset(e.target.value, false)}>
+      {userPresets.map(p => (
+        <option key={p.name} value={p.name}>{p.name}</option>
+      ))}
+    </select>
+  );
+}
+```
+
+User presets are stored as XML files in:
+- **macOS**: `~/Library/Application Support/<PluginName>/UserPresets/`
+- **Windows**: `%APPDATA%/<PluginName>/UserPresets/`
+- **Linux**: `~/.local/share/<PluginName>/UserPresets/`
+
 ### Using the SDK in your plugin
 
 Add as a submodule:
@@ -158,7 +262,9 @@ my-plugin/
 │   ├── PluginProcessor.h
 │   ├── PluginEditor.cpp    # WebView UI host + JUCE 8 relays
 │   ├── PluginEditor.h
-│   └── ParameterIDs.h      # Parameter ID constants
+│   ├── ParameterIDs.h      # Parameter ID constants
+│   ├── PresetManager.h     # Preset save/load system
+│   └── PresetManager.cpp
 ├── web/                    # React UI
 │   ├── package.json
 │   ├── src/
@@ -167,7 +273,8 @@ my-plugin/
 │   │   ├── lib/
 │   │   │   └── juce-bridge.ts   # JUCE 8 frontend API
 │   │   └── hooks/
-│   │       └── useJuceParam.ts  # React hooks for params
+│   │       ├── useJuceParam.ts  # React hooks for params
+│   │       └── usePresets.ts    # Preset management hook
 │   └── vite.config.ts
 ├── beatconnect-sdk/        # SDK submodule (optional)
 └── .github/workflows/
@@ -264,13 +371,37 @@ const gain = useSliderParam('gain', { defaultValue: 0.5 });
 
 ## BeatConnect Integration
 
-To use BeatConnect's build pipeline (code signing, activation, distribution):
+Once your plugin builds locally, connect it to BeatConnect's cloud pipeline:
 
-1. Register your plugin as an "external project" in BeatConnect
-2. Get your `PROJECT_ID` and `WEBHOOK_SECRET`
-3. Add GitHub secrets and uncomment the `beatconnect-build` job in your workflow
+1. **Create a project** in your BeatConnect developer dashboard
+2. **Link your GitHub repo** - BeatConnect will provide `PROJECT_ID` and `WEBHOOK_SECRET`
+3. **Add secrets** to your GitHub repo settings
+4. **Push to trigger builds** - BeatConnect compiles, signs, and hosts your plugin
 
-See [docs/integration.md](docs/integration.md) for details.
+Your dashboard shows build status, download stats, and license activations in real-time.
+
+See [docs/integration.md](docs/integration.md) for detailed setup instructions.
+
+## Examples
+
+### Example Plugin (`examples/example-plugin/`)
+
+A complete, buildable example demonstrating all correct patterns:
+- JUCE 8 WebView parameter binding
+- Level metering and visualizers
+- Activation system integration
+- State persistence
+
+```bash
+cd examples/example-plugin
+
+# Build web UI
+cd web-ui && npm install && npm run build && cd ..
+
+# Build plugin
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
 
 ## Documentation
 

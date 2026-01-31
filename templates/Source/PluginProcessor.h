@@ -9,6 +9,11 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <memory>
+
+#if BEATCONNECT_ACTIVATION_ENABLED
+namespace beatconnect { class Activation; }
+#endif
 
 //==============================================================================
 class {{PLUGIN_NAME}}Processor : public juce::AudioProcessor
@@ -61,6 +66,15 @@ public:
     juce::String getApiBaseUrl() const { return apiBaseUrl_; }
     juce::String getSupabaseKey() const { return supabasePublishableKey_; }
 
+#if BEATCONNECT_ACTIVATION_ENABLED
+    /**
+     * Get the Activation instance for this plugin.
+     * Returns nullptr if activation is not configured or not available.
+     * Use this to check activation status and handle license activation UI.
+     */
+    beatconnect::Activation* getActivation();
+#endif
+
 private:
     //==============================================================================
     // Parameters
@@ -74,6 +88,11 @@ private:
     juce::String apiBaseUrl_;
     juce::String supabasePublishableKey_;
     juce::var buildFlags_;
+
+#if BEATCONNECT_ACTIVATION_ENABLED
+    // Activation SDK instance - auto-configured from build data
+    std::unique_ptr<beatconnect::Activation> activation_;
+#endif
 
     //==============================================================================
     // DSP - Add your processing members here
